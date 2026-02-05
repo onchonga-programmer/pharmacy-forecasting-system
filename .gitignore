@@ -1,0 +1,539 @@
+
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# pdm
+.pdm.toml
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# ============================================================================
+# DATA FILES (IMPORTANT - Keep sensitive data out of Git!)
+# ============================================================================
+
+# Raw data files
+data/raw/*.csv
+data/raw/*.xlsx
+data/raw/*.xls
+data/raw/*.json
+data/raw/*.txt
+
+# Processed data files
+data/processed/*.csv
+data/processed/*.xlsx
+data/processed/*.pkl
+data/processed/*.parquet
+
+# Forecast outputs
+data/forecasts/*.csv
+data/forecasts/*.json
+
+# Results
+data/results/*.csv
+data/results/*.xlsx
+
+# Large data files
+*.csv
+*.xlsx
+*.xls
+*.dat
+
+# Exception: Keep sample/template data
+!data/sample_data.csv
+!data/template.xlsx
+!data/raw/README.md
+!data/processed/README.md
+
+# ============================================================================
+# MACHINE LEARNING MODELS
+# ============================================================================
+
+# Trained models (usually too large for Git)
+models/saved_models/*.pkl
+models/saved_models/*.h5
+models/saved_models/*.pt
+models/saved_models/*.pth
+models/saved_models/*.onnx
+models/saved_models/*.joblib
+
+# Model checkpoints
+models/checkpoints/*.h5
+models/checkpoints/*.pt
+models/checkpoints/*.pth
+
+# TensorFlow/Keras
+*.h5
+*.hdf5
+*.pb
+
+# PyTorch
+*.pt
+*.pth
+
+# Scikit-learn / Joblib
+*.pkl
+*.joblib
+
+# XGBoost
+*.model
+*.bst
+
+# Exception: Keep model architecture files (not weights)
+!models/architectures/
+
+# ============================================================================
+# DATABASE
+# ============================================================================
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# PostgreSQL
+*.sql.gz
+
+# Database backups (can be large)
+database/backups/*.sql
+database/backups/*.dump
+database/backups/*.backup
+
+# Database connection strings (sensitive!)
+database_config.ini
+db_credentials.json
+
+# Exception: Keep schema and sample data
+!database/schema.sql
+!database/sample_data.sql
+
+# ============================================================================
+# LOGS
+# ============================================================================
+
+# Log files
+logs/*.log
+*.log
+
+# Exception: Keep empty logs directory
+!logs/.gitkeep
+
+# ============================================================================
+# CONFIGURATION & SECRETS
+# ============================================================================
+
+# Environment variables (CRITICAL - Contains passwords, API keys!)
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+.env.test
+
+# Configuration files with sensitive data
+config/secrets.yaml
+config/production.yaml
+config/database_credentials.yaml
+secrets.json
+credentials.json
+
+# API keys
+*api_key*
+*apikey*
+*API_KEY*
+
+# Passwords and tokens
+*password*
+*token*
+*secret*
+
+# Exception: Keep example/template configs
+!config/config.example.yaml
+!.env.example
+
+# ============================================================================
+# IDEs & EDITORS
+# ============================================================================
+
+# VSCode
+.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# PyCharm
+.idea/
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/dictionaries
+.idea/**/shelf
+*.iml
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.vim/
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Atom
+.atom/
+
+# ============================================================================
+# OPERATING SYSTEMS
+# ============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ============================================================================
+# DOCUMENTATION
+# ============================================================================
+
+# Compiled documentation
+docs/_build/
+docs/_static/
+docs/_templates/
+
+# LaTeX
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.lot
+*.out
+*.toc
+*.synctex.gz
+
+# PDF outputs (large files, keep originals elsewhere)
+*.pdf
+
+# Exception: Keep essential documentation PDFs
+!documentation/Project_Report_Final.pdf
+!documentation/User_Manual.pdf
+
+# ============================================================================
+# WEB / STATIC FILES
+# ============================================================================
+
+# Compiled static files
+static/compiled/
+static/dist/
+
+# Node modules (if using any JS tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ============================================================================
+# TEMPORARY FILES
+# ============================================================================
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~.nib
+.DS_Store?
+temp/
+tmp/
+*.orig
+
+# Cache directories
+.cache/
+__pycache__/
+
+# ============================================================================
+# DEPLOYMENT
+# ============================================================================
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Kubernetes
+*.kubeconfig
+
+# ============================================================================
+# TESTING
+# ============================================================================
+
+# Test outputs
+test_outputs/
+test_results/
+.coverage
+htmlcov/
+
+# ============================================================================
+# RESEARCH MATERIALS (Optional - Remove if you want to track these)
+# ============================================================================
+
+# Large PDFs of papers
+research_materials/papers/*.pdf
+
+# Interview recordings (can be large)
+research_materials/interviews/*.mp3
+research_materials/interviews/*.wav
+research_materials/interviews/*.mp4
+
+# Exception: Keep important research documents
+!research_materials/papers/key_papers.md
+
+# ============================================================================
+# PROJECT SPECIFIC
+# ============================================================================
+
+# Screenshots (can regenerate)
+static/images/screenshots/*.png
+static/images/screenshots/*.jpg
+
+# Exception: Keep important screenshots for documentation
+!static/images/screenshots/dashboard_main.png
+
+# Exports and reports
+exports/
+reports/*.pdf
+reports/*.docx
+
+# Backup files
+*_backup
+*_old
+*.backup
+
+# ============================================================================
+# CLOUD & DEPLOYMENT SERVICES
+# ============================================================================
+
+# AWS
+.aws/
+
+# Google Cloud
+.gcloud/
+*-gcp-*.json
+
+# Azure
+.azure/
+
+# Heroku
+.heroku/
+
+# ============================================================================
+# ADDITIONAL PATTERNS
+# ============================================================================
+
+# Large binary files
+*.bin
+*.exe
+*.dll
+*.dylib
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# Media files (if not needed for project)
+# Uncomment if you don't want to track these
+# *.mp4
+# *.avi
+# *.mov
+# *.wmv
+# *.flv
+
+# ============================================================================
+# CUSTOM PATTERNS (Add your own below)
+# ============================================================================
+
+# Add any project-specific files you want to ignore here
+# Example:
+# my_personal_notes.txt
+# scratch_work/
