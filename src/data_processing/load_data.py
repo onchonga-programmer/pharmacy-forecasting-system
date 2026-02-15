@@ -103,10 +103,20 @@ class PharmacySalesETL:
 
         try:
             with conn.cursor() as cur:
-                cur.execute("SELECT drug_id, drug_name FROM raw_data.drugs_raw")
+                # Fixed: drug_name should be the key, drug_id the value
+                cur.execute("SELECT drug_name, drug_id FROM raw_data.drugs_raw")
                 drug_map = dict(cur.fetchall())
 
+            # Debug: Print drug names comparison
+            print(f"Drug map from DB: {list(drug_map.keys())}")
+            print(f"Unique drugs in sales_df: {sales_df['drug_name'].unique().tolist()}")
+            
             sales_df['drug_id'] = sales_df['drug_name'].map(drug_map)
+            
+            # Debug: Check how many matched
+            matched = sales_df['drug_id'].notna().sum()
+            print(f"Matched {matched} out of {len(sales_df)} rows")
+            
             sales_df = sales_df.dropna(subset=['drug_id'])
 
             records = [
@@ -193,4 +203,4 @@ if __name__ == "__main__":
     etl = PharmacySalesETL(csv_file)
     etl.run()
 
-    print("\n✅ ETL PIPELINE COMPLETED SUCCESSFULLY")
+    print("\n✅ ETL PIPELINE WAS COMPLETED SUCCESSFULLY")
