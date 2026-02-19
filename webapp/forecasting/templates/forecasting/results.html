@@ -99,7 +99,7 @@
                             <td class="text-muted small">Mean Absolute Percentage Error</td>
                         </tr>
                         {% endif %}
-                        {% if metrics.R2 %}
+                        {% if metrics.R2 != "" %}
                         <tr>
                             <td>R²</td>
                             <td><strong>{{ metrics.R2 }}</strong></td>
@@ -172,10 +172,10 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
 {% if chart_json %}
-const chartData = {{ chart_json|safe }};
+<script>
+const chartData = JSON.parse('{{ chart_json|escapejs }}');
 Plotly.newPlot('main-chart', chartData.data, chartData.layout, {responsive: true, displayModeBar: true});
-{% endif %}
 </script>
+{% endif %}
 {% endblock %}

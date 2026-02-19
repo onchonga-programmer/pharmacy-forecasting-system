@@ -81,7 +81,10 @@ def load_2018_per_drug() -> pd.DataFrame:
 
 
 def load_2019_comparison() -> pd.DataFrame:
-    return pd.read_csv(RESULTS_DIR / "validation_2019" / "2019_per_drug_comparison.csv")
+    df = pd.read_csv(RESULTS_DIR / "validation_2019" / "2019_per_drug_comparison.csv")
+    # Rename Change_% → Change_Percent: % symbol breaks Django template variable lookup
+    df = df.rename(columns={"Change_%": "Change_Percent"})
+    return df
 
 
 def load_2018_predictions() -> pd.DataFrame:

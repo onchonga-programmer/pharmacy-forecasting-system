@@ -135,8 +135,9 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ mae_chart|json_script:"mae-chart-data" }}
 <script>
-const maeData = {{ mae_chart|safe }};
+const maeData = JSON.parse(document.getElementById('mae-chart-data').textContent);
 Plotly.newPlot('mae-chart', maeData.data, maeData.layout, {responsive: true, displayModeBar: false});
 </script>
 {% endblock %}

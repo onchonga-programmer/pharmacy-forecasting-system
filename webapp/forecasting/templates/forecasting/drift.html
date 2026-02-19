@@ -178,7 +178,7 @@
 
 {% block extra_js %}
 <script>
-const driftData = {{ drift_chart|safe }};
+const driftData = JSON.parse('{{ drift_chart|escapejs }}');
 Plotly.newPlot('drift-chart', driftData.data, driftData.layout, {responsive: true, displayModeBar: false});
 </script>
 {% endblock %}
