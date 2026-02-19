@@ -1,0 +1,142 @@
+{% extends "forecasting/base.html" %}
+
+{% block title %}Dashboard — Pharmacy Forecast System{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item active">Dashboard</li>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h4 class="mb-0 fw-bold">Overview Dashboard</h4>
+        <small class="text-muted">XGBoost · Trained 2014–2017 · Validated 2018 · Tested 2019</small>
+    </div>
+</div>
+
+<!-- ── Metric cards ────────────────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+
+    <!-- 2018 Validation MAE -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="metric-card h-100" style="background:#e9f7ef;">
+            <div class="metric-value text-success">{{ mae_2018 }}</div>
+            <div class="metric-label text-success">MAE — 2018 Validation</div>
+            <div class="metric-hint text-muted">
+                <i class="bi bi-check-circle-fill text-success me-1"></i>
+                MAPE {{ mape_2018 }}% · R² {{ r2_2018 }}
+            </div>
+        </div>
+    </div>
+
+    <!-- 2019 Test MAE -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="metric-card h-100" style="background:#fdf0f0;">
+            <div class="metric-value text-danger">{{ mae_2019 }}</div>
+            <div class="metric-label text-danger">MAE — 2019 Final Test</div>
+            <div class="metric-hint text-muted">
+                <i class="bi bi-arrow-up-circle-fill text-danger me-1"></i>
+                MAPE {{ mape_2019 }}%
+            </div>
+        </div>
+    </div>
+
+    <!-- % Degradation -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="metric-card h-100" style="background:#fff8e1;">
+            <div class="metric-value text-warning">+{{ pct_change }}%</div>
+            <div class="metric-label text-warning">MAE Degradation</div>
+            <div class="metric-hint text-muted">
+                <i class="bi bi-info-circle me-1"></i>
+                2018 → 2019 change
+            </div>
+        </div>
+    </div>
+
+    <!-- Drugs drifted -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="metric-card h-100" style="background:#fce8ff;">
+            <div class="metric-value" style="color:#9c27b0;">{{ drugs_drifted }}/{{ total_drugs }}</div>
+            <div class="metric-label" style="color:#9c27b0;">Drugs Showing Drift</div>
+            <div class="metric-hint text-muted">
+                <i class="bi bi-check2-circle text-success me-1"></i>
+                {{ drugs_stable }} stable drug{% if drugs_stable != 1 %}s{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── MAE Comparison Chart ───────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="chart-card">
+            <div id="mae-chart"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Per-Drug Status Table ─────────────────────────────────────────── -->
+<div class="row g-3">
+    <div class="col-12">
+        <div class="table-card">
+            <div class="p-3 border-bottom">
+                <h6 class="mb-0 fw-semibold">Per-Drug Comparison: 2018 Validation vs 2019 Test</h6>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Drug</th>
+                            <th>MAE 2018</th>
+                            <th>MAE 2019</th>
+                            <th>MAPE 2019</th>
+                            <th>R² 2019</th>
+                            <th>Change %</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in comparison %}
+                        <tr class="{% if 'Degraded' in row.Status %}{% if row.MAE_2019 > 50 %}row-critical{% else %}row-degraded{% endif %}{% else %}row-stable{% endif %}">
+                            <td><strong>{{ row.Drug }}</strong></td>
+                            <td>{{ row.MAE_2018 }}</td>
+                            <td>{{ row.MAE_2019 }}</td>
+                            <td>{{ row.MAPE_2019 }}%</td>
+                            <td>{{ row.R2_2019 }}</td>
+                            <td>
+                                {% if row.Change_Percent > 0 %}
+                                    <span class="text-danger">+{{ row.Change_Percent|floatformat:1 }}%</span>
+                                {% else %}
+                                    <span class="text-success">{{ row.Change_Percent|floatformat:1 }}%</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if 'Degraded' in row.Status %}
+                                    <span class="badge badge-degraded text-white">Degraded</span>
+                                {% else %}
+                                    <span class="badge badge-stable text-white">Stable</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{% url 'forecasting:results' %}?drug={{ row.Drug }}&year=2019"
+                                   class="btn btn-sm btn-outline-secondary py-0">
+                                    <i class="bi bi-graph-up"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const maeData = {{ mae_chart|safe }};
+Plotly.newPlot('mae-chart', maeData.data, maeData.layout, {responsive: true, displayModeBar: false});
+</script>
+{% endblock %}

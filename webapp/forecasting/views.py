@@ -1,0 +1,279 @@
+"""
+Views for the Pharmacy Forecasting System Django app.
+Pages: Dashboard, Results, Live Forecast, Drift Monitor.
+"""
+
+import json
+import traceback
+
+import pandas as pd
+import plotly.graph_objects as go
+from django.shortcuts import render
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
+
+from . import ml_engine
+
+
+# ── Helper ────────────────────────────────────────────────────────────────────
+
+def _fig_json(fig) -> str:
+    """Serialise a Plotly figure to a JSON string safe for template embedding."""
+    return fig.to_json()
+
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+
+def dashboard(request):
+    try:
+        m18    = ml_engine.load_2018_metrics()
+        cmp_df = ml_engine.load_2019_comparison()
+
+        # Overall 2019 metrics
+        preds_2019  = ml_engine.load_2019_predictions()
+        mae_2019    = round(float((preds_2019["actual"] - preds_2019["xgb_pred"]).abs().mean()), 2)
+        mape_2019   = round(
+            float(((preds_2019["actual"] - preds_2019["xgb_pred"]).abs() /
+                   preds_2019["actual"].replace(0, float("nan"))).mean() * 100), 2)
+
+        pct_change  = round(((mae_2019 - m18["mae"]) / m18["mae"]) * 100, 1)
+
+        drugs_drifted = int(cmp_df["Status"].str.contains("Degraded", na=False).sum())
+        drugs_stable  = len(cmp_df) - drugs_drifted
+
+        # ── MAE comparison bar chart ──
+        fig = go.Figure(data=[
+            go.Bar(
+                name="2018 Validation",
+                x=cmp_df["Drug"].tolist(),
+                y=cmp_df["MAE_2018"].tolist(),
+                marker_color="#198754",
+                text=[f"{v:.2f}" for v in cmp_df["MAE_2018"]],
+                textposition="outside",
+            ),
+            go.Bar(
+                name="2019 Test",
+                x=cmp_df["Drug"].tolist(),
+                y=cmp_df["MAE_2019"].tolist(),
+                marker_color="#dc3545",
+                text=[f"{v:.2f}" for v in cmp_df["MAE_2019"]],
+                textposition="outside",
+            ),
+        ])
+        fig.update_layout(
+            barmode="group",
+            title=dict(text="MAE per Drug — 2018 Validation vs 2019 Test", font=dict(size=14)),
+            xaxis_title="Drug (ATC Code)",
+            yaxis_title="Mean Absolute Error (units)",
+            template="plotly_white",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            height=380,
+            margin=dict(l=40, r=40, t=60, b=40),
+        )
+
+        context = {
+            "mae_2018":      m18["mae"],
+            "mape_2018":     m18["mape"],
+            "r2_2018":       m18["r2"],
+            "mae_2019":      mae_2019,
+            "mape_2019":     mape_2019,
+            "pct_change":    pct_change,
+            "drugs_drifted": drugs_drifted,
+            "drugs_stable":  drugs_stable,
+            "total_drugs":   len(cmp_df),
+            "mae_chart":     _fig_json(fig),
+            "comparison":    cmp_df.to_dict("records"),
+            "page":          "dashboard",
+        }
+    except Exception as e:
+        context = {"error": str(e) + "\n\n" + traceback.format_exc(), "page": "dashboard"}
+
+    return render(request, "forecasting/dashboard.html", context)
+
+
+# ── Results ───────────────────────────────────────────────────────────────────
+
+def results(request):
+    selected_drug = request.GET.get("drug", "M01AB")
+    selected_year = request.GET.get("year", "2018")
+
+    try:
+        if selected_year == "2018":
+            preds      = ml_engine.load_2018_predictions()
+            drug_preds = preds[preds["drug_name"] == selected_drug].sort_values("week_start_date")
+        else:
+            preds      = ml_engine.load_2019_predictions()
+            drug_preds = preds[preds["drug_name"] == selected_drug].sort_values("week_start_date")
+
+        dates     = drug_preds["week_start_date"].dt.strftime("%Y-%m-%d").tolist()
+        actual    = drug_preds["actual"].tolist()
+        predicted = drug_preds["xgb_pred"].tolist()
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=dates, y=actual,
+            mode="lines+markers",
+            name="Actual Sales",
+            line=dict(color="#0d6efd", width=2),
+            marker=dict(size=5),
+        ))
+        fig.add_trace(go.Scatter(
+            x=dates, y=predicted,
+            mode="lines+markers",
+            name="XGBoost Predicted",
+            line=dict(color="#fd7e14", width=2, dash="dash"),
+            marker=dict(size=5),
+        ))
+        fig.update_layout(
+            title=dict(
+                text=f"{selected_drug} — Actual vs Predicted ({selected_year})",
+                font=dict(size=15),
+            ),
+            xaxis_title="Week",
+            yaxis_title="Sales Quantity (units)",
+            template="plotly_white",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            height=420,
+            margin=dict(l=40, r=40, t=60, b=40),
+            hovermode="x unified",
+        )
+
+        # Per-drug metrics
+        if selected_year == "2018":
+            metrics_df = ml_engine.load_2018_per_drug()
+            row = metrics_df[metrics_df["Drug"] == selected_drug]
+        else:
+            cmp_df = ml_engine.load_2019_comparison()
+            row = cmp_df[cmp_df["Drug"] == selected_drug]
+
+        metrics = row.iloc[0].to_dict() if len(row) > 0 else {}
+
+        context = {
+            "selected_drug": selected_drug,
+            "selected_year": selected_year,
+            "drug_list":     ml_engine.DRUG_LIST,
+            "chart_json":    _fig_json(fig),
+            "metrics":       metrics,
+            "page":          "results",
+        }
+    except Exception as e:
+        context = {
+            "error":         str(e) + "\n\n" + traceback.format_exc(),
+            "selected_drug": selected_drug,
+            "selected_year": selected_year,
+            "drug_list":     ml_engine.DRUG_LIST,
+            "page":          "results",
+        }
+
+    return render(request, "forecasting/results.html", context)
+
+
+# ── Live Forecast ─────────────────────────────────────────────────────────────
+
+def forecast(request):
+    result        = None
+    batch_results = None
+    form_data     = {}
+
+    if request.method == "POST":
+        action = request.POST.get("action", "single")
+
+        if action == "single":
+            drug_name     = request.POST.get("drug_name", "").strip().upper()
+            forecast_date = request.POST.get("forecast_date", "").strip()
+            form_data     = {"drug_name": drug_name, "forecast_date": forecast_date}
+
+            if drug_name and forecast_date:
+                result = ml_engine.generate_forecast(drug_name, forecast_date)
+            else:
+                result = {"error": "Please select a drug and a forecast date."}
+
+        elif action == "csv":
+            csv_file = request.FILES.get("csv_file")
+            if csv_file:
+                batch_results = ml_engine.process_csv_forecast(csv_file)
+            else:
+                result = {"error": "Please upload a CSV file."}
+
+    context = {
+        "result":            result,
+        "batch_results":     batch_results,
+        "drug_list":         ml_engine.DRUG_LIST,
+        "drug_descriptions": ml_engine.DRUG_DESCRIPTIONS,
+        "form_data":         form_data,
+        "page":              "forecast",
+    }
+    return render(request, "forecasting/forecast.html", context)
+
+
+# ── Drift Monitor ─────────────────────────────────────────────────────────────
+
+def drift(request):
+    try:
+        cmp_df  = ml_engine.load_2019_comparison()
+        metrics = ml_engine.load_2018_metrics()
+
+        mae_threshold  = round(metrics["mae"] * 1.20, 2)
+        mape_threshold = round(metrics["mape"] * 1.20, 2)
+
+        drugs_drifted = int(cmp_df["Status"].str.contains("Degraded", na=False).sum())
+        drugs_stable  = len(cmp_df) - drugs_drifted
+
+        cmp_sorted = cmp_df.sort_values("MAE_2019", ascending=True)
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            name="2018 Validation MAE",
+            y=cmp_sorted["Drug"].tolist(),
+            x=cmp_sorted["MAE_2018"].tolist(),
+            orientation="h",
+            marker_color="#198754",
+            text=[f"{v:.2f}" for v in cmp_sorted["MAE_2018"]],
+            textposition="outside",
+        ))
+        fig.add_trace(go.Bar(
+            name="2019 Test MAE",
+            y=cmp_sorted["Drug"].tolist(),
+            x=cmp_sorted["MAE_2019"].tolist(),
+            orientation="h",
+            marker_color="#dc3545",
+            text=[f"{v:.2f}" for v in cmp_sorted["MAE_2019"]],
+            textposition="outside",
+        ))
+        fig.update_layout(
+            barmode="group",
+            title=dict(text="Model Drift: MAE Degradation per Drug (2018 → 2019)", font=dict(size=14)),
+            xaxis_title="Mean Absolute Error (units)",
+            template="plotly_white",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            height=420,
+            margin=dict(l=60, r=60, t=60, b=40),
+        )
+
+        context = {
+            "comparison":     cmp_df.to_dict("records"),
+            "mae_2018":       metrics["mae"],
+            "mape_2018":      metrics["mape"],
+            "r2_2018":        metrics["r2"],
+            "mae_threshold":  mae_threshold,
+            "mape_threshold": mape_threshold,
+            "drugs_drifted":  drugs_drifted,
+            "drugs_stable":   drugs_stable,
+            "total_drugs":    len(cmp_df),
+            "drift_chart":    _fig_json(fig),
+            "page":           "drift",
+        }
+    except Exception as e:
+        context = {"error": str(e) + "\n\n" + traceback.format_exc(), "page": "drift"}
+
+    return render(request, "forecasting/drift.html", context)
+
+
+# ── Sample CSV download ───────────────────────────────────────────────────────
+
+def sample_csv(request):
+    from django.http import HttpResponse
+    from .base import generate_sample_csv_bytes
+    content = generate_sample_csv_bytes()
+    response = HttpResponse(content, content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="forecast_template.csv"'
+    return response

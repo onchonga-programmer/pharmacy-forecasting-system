@@ -1,0 +1,184 @@
+{% extends "forecasting/base.html" %}
+
+{% block title %}Drift Monitor — Pharmacy Forecast System{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item active">Drift Monitor</li>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h4 class="mb-0 fw-bold">Model Drift Monitor</h4>
+        <small class="text-muted">Comparing 2018 validation performance vs 2019 out-of-sample test</small>
+    </div>
+</div>
+
+<!-- ── Alert banner ───────────────────────────────────────────────────── -->
+{% if drugs_drifted > 0 %}
+<div class="alert alert-danger d-flex align-items-start gap-2 mb-4">
+    <i class="bi bi-exclamation-triangle-fill fs-5 mt-1"></i>
+    <div>
+        <strong>Model Drift Detected:</strong>
+        {{ drugs_drifted }} out of {{ total_drugs }} drug{% if drugs_drifted != 1 %}s{% endif %}
+        show significant performance degradation in 2019.
+        MAE threshold: <strong>{{ mae_threshold }}</strong> (= 2018 MAE × 1.20).
+        The primary driver is <strong>N02BE</strong> (paracetamol demand surge).
+    </div>
+</div>
+{% else %}
+<div class="alert alert-success d-flex align-items-start gap-2 mb-4">
+    <i class="bi bi-check-circle-fill fs-5 mt-1"></i>
+    <div>All {{ total_drugs }} drugs are performing within acceptable bounds.</div>
+</div>
+{% endif %}
+
+<!-- ── Summary metric cards ───────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-lg-3">
+        <div class="metric-card h-100" style="background:#e9f7ef;">
+            <div class="metric-value text-success">{{ drugs_stable }}</div>
+            <div class="metric-label text-success">Stable Drugs</div>
+            <div class="metric-hint text-muted">MAE within 20% of 2018 baseline</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="metric-card h-100" style="background:#fdf0f0;">
+            <div class="metric-value text-danger">{{ drugs_drifted }}</div>
+            <div class="metric-label text-danger">Drifted Drugs</div>
+            <div class="metric-hint text-muted">MAE &gt; {{ mae_threshold }} in 2019</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="metric-card h-100" style="background:#fff8e1;">
+            <div class="metric-value text-warning">{{ mae_threshold }}</div>
+            <div class="metric-label text-warning">MAE Alert Threshold</div>
+            <div class="metric-hint text-muted">2018 MAE ({{ mae_2018 }}) × 1.20</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="metric-card h-100" style="background:#e8f0fe;">
+            <div class="metric-value text-primary">{{ mape_threshold }}%</div>
+            <div class="metric-label text-primary">MAPE Alert Threshold</div>
+            <div class="metric-hint text-muted">2018 MAPE ({{ mape_2018 }}%) × 1.20</div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Drift bar chart ────────────────────────────────────────────────── -->
+<div class="chart-card mb-4">
+    <div id="drift-chart"></div>
+</div>
+
+<!-- ── Per-drug drift table ───────────────────────────────────────────── -->
+<div class="table-card">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between">
+        <h6 class="mb-0 fw-semibold">Per-Drug Drift Analysis</h6>
+        <small class="text-muted">N02BE highlighted as primary drift driver</small>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Drug</th>
+                    <th>Description</th>
+                    <th>MAE 2018</th>
+                    <th>MAE 2019</th>
+                    <th>MAPE 2019</th>
+                    <th>R² 2019</th>
+                    <th>Change</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in comparison %}
+                <tr class="{% if row.Drug == 'N02BE' %}row-critical{% elif 'Degraded' in row.Status %}row-degraded{% else %}row-stable{% endif %}">
+                    <td>
+                        <strong>{{ row.Drug }}</strong>
+                        {% if row.Drug == 'N02BE' %}
+                        <span class="badge bg-danger ms-1" style="font-size:.65rem;">⚠ Critical</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-muted small">
+                        {% if row.Drug == "M01AB" %}Anti-inflammatory (Acetic)
+                        {% elif row.Drug == "M01AE" %}Anti-inflammatory (Propionic)
+                        {% elif row.Drug == "N02BA" %}Analgesics – Salicylic acid
+                        {% elif row.Drug == "N02BE" %}Analgesics – Paracetamol
+                        {% elif row.Drug == "N05B"  %}Anxiolytics
+                        {% elif row.Drug == "N05C"  %}Hypnotics & Sedatives
+                        {% elif row.Drug == "R03"   %}Obstructive airway drugs
+                        {% elif row.Drug == "R06"   %}Antihistamines
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>{{ row.MAE_2018 }}</td>
+                    <td>
+                        <strong class="{% if row.MAE_2019 > mae_threshold %}text-danger{% else %}text-success{% endif %}">
+                            {{ row.MAE_2019 }}
+                        </strong>
+                    </td>
+                    <td>{{ row.MAPE_2019 }}%</td>
+                    <td>
+                        <span class="{% if row.R2_2019 < 0 %}text-danger{% elif row.R2_2019 > 0.8 %}text-success{% else %}text-warning{% endif %}">
+                            {{ row.R2_2019 }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if row.Change_Percent > 0 %}
+                        <span class="text-danger fw-semibold">+{{ row.Change_Percent|floatformat:1 }}%</span>
+                        {% else %}
+                        <span class="text-success fw-semibold">{{ row.Change_Percent|floatformat:1 }}%</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if 'Degraded' in row.Status %}
+                        <span class="badge badge-degraded text-white">Degraded</span>
+                        {% else %}
+                        <span class="badge badge-stable text-white">Stable</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'forecasting:results' %}?drug={{ row.Drug }}&year=2019"
+                           class="btn btn-sm btn-outline-secondary py-0 px-2">
+                            <i class="bi bi-graph-up"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ── Recommendations ────────────────────────────────────────────────── -->
+<div class="chart-card mt-4">
+    <h6 class="fw-semibold mb-3"><i class="bi bi-lightbulb me-2 text-warning"></i>Recommendations</h6>
+    <div class="row g-3">
+        <div class="col-md-4">
+            <div class="p-3 rounded" style="background:#fff8e1;">
+                <div class="fw-semibold mb-1"><i class="bi bi-arrow-repeat me-1"></i>Retrain Periodically</div>
+                <small class="text-muted">Retrain the model annually using the most recent 4 years of data to capture demand shifts.</small>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="p-3 rounded" style="background:#fdf0f0;">
+                <div class="fw-semibold mb-1"><i class="bi bi-bell me-1"></i>Monitor N02BE</div>
+                <small class="text-muted">Paracetamol showed a demand surge (+175,000% MAE change). Monitor external demand drivers (outbreaks, policy).</small>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="p-3 rounded" style="background:#e9f7ef;">
+                <div class="fw-semibold mb-1"><i class="bi bi-shield-check me-1"></i>Stable Drugs</div>
+                <small class="text-muted">N05C and R03 remain reliably predicted. Continue using the current model for these drugs without retraining.</small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const driftData = {{ drift_chart|safe }};
+Plotly.newPlot('drift-chart', driftData.data, driftData.layout, {responsive: true, displayModeBar: false});
+</script>
+{% endblock %}

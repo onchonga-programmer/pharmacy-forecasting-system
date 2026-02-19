@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Pharmacy Forecast System{% endblock %}</title>
+
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+
+    <style>
+        :root {
+            --sidebar-w: 240px;
+            --sidebar-bg: #12203a;
+            --sidebar-text: #8fa3bf;
+            --sidebar-active-bg: #1a3a6e;
+            --topbar-h: 56px;
+        }
+
+        body { background: #f0f4f8; }
+
+        /* ── Sidebar ── */
+        .sidebar {
+            position: fixed; top: 0; left: 0;
+            width: var(--sidebar-w); height: 100vh;
+            background: var(--sidebar-bg);
+            display: flex; flex-direction: column;
+            z-index: 1050; overflow-y: auto;
+        }
+        .sidebar-brand {
+            padding: 1.25rem 1rem 1rem;
+            border-bottom: 1px solid rgba(255,255,255,.08);
+        }
+        .sidebar-brand .brand-title {
+            color: #fff; font-size: .95rem; font-weight: 700; margin: 0;
+        }
+        .sidebar-brand .brand-sub {
+            color: var(--sidebar-text); font-size: .72rem; margin-top: 2px;
+        }
+        .sidebar-nav { padding: .75rem 0; flex: 1; }
+        .sidebar-nav .nav-link {
+            color: var(--sidebar-text);
+            padding: .65rem 1.25rem;
+            display: flex; align-items: center; gap: .75rem;
+            font-size: .875rem; border-radius: 0;
+            transition: background .15s, color .15s;
+        }
+        .sidebar-nav .nav-link i { font-size: 1.1rem; width: 20px; text-align: center; }
+        .sidebar-nav .nav-link:hover  { color: #fff; background: rgba(255,255,255,.06); }
+        .sidebar-nav .nav-link.active { color: #fff; background: var(--sidebar-active-bg);
+                                        border-left: 3px solid #4e9bff; }
+        .sidebar-footer {
+            padding: .75rem 1rem;
+            border-top: 1px solid rgba(255,255,255,.08);
+            font-size: .7rem; color: var(--sidebar-text); text-align: center;
+        }
+
+        /* ── Main area ── */
+        .main-wrapper { margin-left: var(--sidebar-w); min-height: 100vh; display: flex; flex-direction: column; }
+
+        .topbar {
+            height: var(--topbar-h);
+            background: #fff;
+            border-bottom: 1px solid #dee2e6;
+            padding: 0 1.5rem;
+            display: flex; align-items: center; justify-content: space-between;
+            position: sticky; top: 0; z-index: 100;
+        }
+        .topbar .breadcrumb { margin: 0; }
+
+        .content { padding: 1.5rem; flex: 1; }
+
+        /* ── Metric cards ── */
+        .metric-card {
+            border: none; border-radius: 12px;
+            padding: 1.25rem 1.5rem;
+            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+        }
+        .metric-card .metric-value { font-size: 2rem; font-weight: 700; line-height: 1.1; }
+        .metric-card .metric-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; opacity: .7; margin-top: .3rem; }
+        .metric-card .metric-hint  { font-size: .82rem; margin-top: .4rem; opacity: .85; }
+
+        /* ── Chart card ── */
+        .chart-card {
+            background: #fff; border-radius: 12px; padding: 1.25rem;
+            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+        }
+
+        /* ── Table ── */
+        .table-card {
+            background: #fff; border-radius: 12px; overflow: hidden;
+            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+        }
+        .table-card .table { margin: 0; }
+        .table-card .table th { background: #f8f9fa; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }
+
+        /* ── Status badges ── */
+        .badge-degraded { background-color: #dc3545; }
+        .badge-stable   { background-color: #198754; }
+        .row-degraded   { background-color: #fff5f5 !important; }
+        .row-stable     { background-color: #f0faf0 !important; }
+        .row-critical   { background-color: #ffe0e0 !important; font-weight: 600; }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+<!-- ── Sidebar ──────────────────────────────────────────────────────────── -->
+<aside class="sidebar">
+    <div class="sidebar-brand">
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <i class="bi bi-capsule-pill text-info fs-5"></i>
+            <p class="brand-title">Pharmacy Forecast</p>
+        </div>
+        <p class="brand-sub mb-0">XGBoost · Django · Final Year Project</p>
+    </div>
+
+    <ul class="sidebar-nav list-unstyled mb-0">
+        <li>
+            <a href="{% url 'forecasting:dashboard' %}"
+               class="nav-link {% if page == 'dashboard' %}active{% endif %}">
+                <i class="bi bi-speedometer2"></i> Dashboard
+            </a>
+        </li>
+        <li>
+            <a href="{% url 'forecasting:results' %}"
+               class="nav-link {% if page == 'results' %}active{% endif %}">
+                <i class="bi bi-graph-up-arrow"></i> Results &amp; Charts
+            </a>
+        </li>
+        <li>
+            <a href="{% url 'forecasting:forecast' %}"
+               class="nav-link {% if page == 'forecast' %}active{% endif %}">
+                <i class="bi bi-magic"></i> Live Forecast
+            </a>
+        </li>
+        <li>
+            <a href="{% url 'forecasting:drift' %}"
+               class="nav-link {% if page == 'drift' %}active{% endif %}">
+                <i class="bi bi-exclamation-triangle"></i> Drift Monitor
+            </a>
+        </li>
+    </ul>
+
+    <div class="sidebar-footer">
+        Model trained 2014–2017<br>
+        Validated 2018 · Tested 2019
+    </div>
+</aside>
+
+<!-- ── Main content ─────────────────────────────────────────────────────── -->
+<div class="main-wrapper">
+
+    <!-- Topbar -->
+    <div class="topbar">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item">
+                    <a href="{% url 'forecasting:dashboard' %}" class="text-decoration-none">Home</a>
+                </li>
+                {% block breadcrumb %}{% endblock %}
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-success rounded-pill">
+                <i class="bi bi-check-circle me-1"></i>Model Active
+            </span>
+            <small class="text-muted">XGBoost 2.0 · R² 0.9922</small>
+        </div>
+    </div>
+
+    <!-- Page content -->
+    <div class="content">
+        {% if error %}
+        <div class="alert alert-danger">
+            <i class="bi bi-exclamation-circle me-2"></i>
+            <strong>Error:</strong>
+            <pre class="mb-0 mt-2" style="font-size:.78rem;">{{ error }}</pre>
+        </div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+</div><!-- /main-wrapper -->
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>
