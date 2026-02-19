@@ -141,14 +141,14 @@
         <li>
             <a href="{% url 'forecasting:drift' %}"
                class="nav-link {% if page == 'drift' %}active{% endif %}">
-                <i class="bi bi-exclamation-triangle"></i> Drift Monitor
+                <i class="bi bi-exclamation-triangle"></i> Accuracy Monitor
             </a>
         </li>
     </ul>
 
     <div class="sidebar-footer">
-        Model trained 2014–2017<br>
-        Validated 2018 · Tested 2019
+        Learned from 2014–2017 sales<br>
+        Checked on 2018 · Tested on 2019
     </div>
 </aside>
 
@@ -169,7 +169,7 @@
             <span class="badge bg-success rounded-pill">
                 <i class="bi bi-check-circle me-1"></i>Model Active
             </span>
-            <small class="text-muted">XGBoost 2.0 · R² 0.9922</small>
+            <small class="text-muted">XGBoost 2.0 · 99% Accuracy (2018)</small>
         </div>
     </div>
 

@@ -10,63 +10,63 @@
 <div class="d-flex align-items-center justify-content-between mb-3">
     <div>
         <h4 class="mb-0 fw-bold">Overview Dashboard</h4>
-        <small class="text-muted">XGBoost · Trained 2014–2017 · Validated 2018 · Tested 2019</small>
+        <small class="text-muted">Forecasting model trained on 2014–2017 sales · Checked on 2018 · Tested on real 2019 data</small>
     </div>
 </div>
 
 <!-- ── Metric cards ────────────────────────────────────────────────────── -->
 <div class="row g-3 mb-4">
 
-    <!-- 2018 Validation MAE -->
+    <!-- 2018 Avg Error card -->
     <div class="col-sm-6 col-xl-3">
         <div class="metric-card h-100" style="background:#e9f7ef;">
-            <div class="metric-value text-success">{{ mae_2018 }}</div>
-            <div class="metric-label text-success">MAE — 2018 Validation</div>
+            <div class="metric-value text-success">{{ mae_2018 }} units</div>
+            <div class="metric-label text-success">Avg Forecast Error — 2018</div>
             <div class="metric-hint text-muted">
                 <i class="bi bi-check-circle-fill text-success me-1"></i>
-                MAPE {{ mape_2018 }}% · R² {{ r2_2018 }}
+                Typically {{ mape_2018 }}% off · Accuracy: {{ r2_2018 }}/1.0
             </div>
         </div>
     </div>
 
-    <!-- 2019 Test MAE -->
+    <!-- 2019 Avg Error card -->
     <div class="col-sm-6 col-xl-3">
         <div class="metric-card h-100" style="background:#fdf0f0;">
-            <div class="metric-value text-danger">{{ mae_2019 }}</div>
-            <div class="metric-label text-danger">MAE — 2019 Final Test</div>
+            <div class="metric-value text-danger">{{ mae_2019 }} units</div>
+            <div class="metric-label text-danger">Avg Forecast Error — 2019</div>
             <div class="metric-hint text-muted">
                 <i class="bi bi-arrow-up-circle-fill text-danger me-1"></i>
-                MAPE {{ mape_2019 }}%
+                Typically {{ mape_2019 }}% off in 2019
             </div>
         </div>
     </div>
 
-    <!-- % Degradation -->
+    <!-- Error increase card -->
     <div class="col-sm-6 col-xl-3">
         <div class="metric-card h-100" style="background:#fff8e1;">
             <div class="metric-value text-warning">+{{ pct_change }}%</div>
-            <div class="metric-label text-warning">MAE Degradation</div>
+            <div class="metric-label text-warning">Forecast Error Increase</div>
             <div class="metric-hint text-muted">
                 <i class="bi bi-info-circle me-1"></i>
-                2018 → 2019 change
+                How much less accurate in 2019 vs 2018
             </div>
         </div>
     </div>
 
-    <!-- Drugs drifted -->
+    <!-- Drugs needing attention card -->
     <div class="col-sm-6 col-xl-3">
         <div class="metric-card h-100" style="background:#fce8ff;">
             <div class="metric-value" style="color:#9c27b0;">{{ drugs_drifted }}/{{ total_drugs }}</div>
-            <div class="metric-label" style="color:#9c27b0;">Drugs Showing Drift</div>
+            <div class="metric-label" style="color:#9c27b0;">Drugs Needing Attention</div>
             <div class="metric-hint text-muted">
                 <i class="bi bi-check2-circle text-success me-1"></i>
-                {{ drugs_stable }} stable drug{% if drugs_stable != 1 %}s{% endif %}
+                {{ drugs_stable }} drug{% if drugs_stable != 1 %}s{% endif %} forecasting well
             </div>
         </div>
     </div>
 </div>
 
-<!-- ── MAE Comparison Chart ───────────────────────────────────────────── -->
+<!-- ── Forecast Error Comparison Chart ─────────────────────────────────── -->
 <div class="row g-3 mb-4">
     <div class="col-12">
         <div class="chart-card">
@@ -80,19 +80,20 @@
     <div class="col-12">
         <div class="table-card">
             <div class="p-3 border-bottom">
-                <h6 class="mb-0 fw-semibold">Per-Drug Comparison: 2018 Validation vs 2019 Test</h6>
+                <h6 class="mb-0 fw-semibold">Drug-by-Drug Comparison: How Well Did We Forecast in 2018 vs 2019?</h6>
+                <small class="text-muted">Lower error = better forecast. Accuracy score closer to 1.0 = better.</small>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle">
                     <thead>
                         <tr>
                             <th>Drug</th>
-                            <th>MAE 2018</th>
-                            <th>MAE 2019</th>
-                            <th>MAPE 2019</th>
-                            <th>R² 2019</th>
-                            <th>Change %</th>
-                            <th>Status</th>
+                            <th title="Average number of units the forecast was off by">Avg Error 2018 <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
+                            <th title="Average number of units the forecast was off by in 2019">Avg Error 2019 <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
+                            <th title="On average, what % was the forecast off?">% Off 2019 <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
+                            <th title="How well did the forecast match the real pattern? 1.0 = perfect">Accuracy 2019 <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
+                            <th>Change</th>
+                            <th>Forecast Status</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -113,9 +114,9 @@
                             </td>
                             <td>
                                 {% if 'Degraded' in row.Status %}
-                                    <span class="badge badge-degraded text-white">Degraded</span>
+                                    <span class="badge badge-degraded text-white">⚠ Less Accurate</span>
                                 {% else %}
-                                    <span class="badge badge-stable text-white">Stable</span>
+                                    <span class="badge badge-stable text-white">✓ On Track</span>
                                 {% endif %}
                             </td>
                             <td>

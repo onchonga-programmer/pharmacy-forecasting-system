@@ -9,8 +9,8 @@
 {% block content %}
 <div class="d-flex align-items-center justify-content-between mb-3">
     <div>
-        <h4 class="mb-0 fw-bold">Model Drift Monitor</h4>
-        <small class="text-muted">Comparing 2018 validation performance vs 2019 out-of-sample test</small>
+        <h4 class="mb-0 fw-bold">Forecast Accuracy Monitor</h4>
+        <small class="text-muted">How well did the model forecast sales in 2018 (check period) vs 2019 (real-world test)?</small>
     </div>
 </div>
 
@@ -19,11 +19,11 @@
 <div class="alert alert-danger d-flex align-items-start gap-2 mb-4">
     <i class="bi bi-exclamation-triangle-fill fs-5 mt-1"></i>
     <div>
-        <strong>Model Drift Detected:</strong>
+        <strong>Accuracy Drop Detected:</strong>
         {{ drugs_drifted }} out of {{ total_drugs }} drug{% if drugs_drifted != 1 %}s{% endif %}
-        show significant performance degradation in 2019.
-        MAE threshold: <strong>{{ mae_threshold }}</strong> (= 2018 MAE × 1.20).
-        The primary driver is <strong>N02BE</strong> (paracetamol demand surge).
+        are forecasting less accurately in 2019 than in 2018.
+        The acceptable error limit is <strong>{{ mae_threshold }} units</strong>.
+        The main problem drug is <strong>N02BE (Paracetamol)</strong> — its sales surged in 2019 in a way the model had never seen.
     </div>
 </div>
 {% else %}
@@ -38,29 +38,29 @@
     <div class="col-sm-6 col-lg-3">
         <div class="metric-card h-100" style="background:#e9f7ef;">
             <div class="metric-value text-success">{{ drugs_stable }}</div>
-            <div class="metric-label text-success">Stable Drugs</div>
-            <div class="metric-hint text-muted">MAE within 20% of 2018 baseline</div>
+            <div class="metric-label text-success">Drugs Forecasting Well</div>
+            <div class="metric-hint text-muted">Forecast error still within acceptable range</div>
         </div>
     </div>
     <div class="col-sm-6 col-lg-3">
         <div class="metric-card h-100" style="background:#fdf0f0;">
             <div class="metric-value text-danger">{{ drugs_drifted }}</div>
-            <div class="metric-label text-danger">Drifted Drugs</div>
-            <div class="metric-hint text-muted">MAE &gt; {{ mae_threshold }} in 2019</div>
+            <div class="metric-label text-danger">Drugs Needing Attention</div>
+            <div class="metric-hint text-muted">Forecast error exceeded {{ mae_threshold }} units in 2019</div>
         </div>
     </div>
     <div class="col-sm-6 col-lg-3">
         <div class="metric-card h-100" style="background:#fff8e1;">
-            <div class="metric-value text-warning">{{ mae_threshold }}</div>
-            <div class="metric-label text-warning">MAE Alert Threshold</div>
-            <div class="metric-hint text-muted">2018 MAE ({{ mae_2018 }}) × 1.20</div>
+            <div class="metric-value text-warning">{{ mae_threshold }} units</div>
+            <div class="metric-label text-warning">Max Acceptable Error</div>
+            <div class="metric-hint text-muted">2018 avg error ({{ mae_2018 }}) + 20% buffer</div>
         </div>
     </div>
     <div class="col-sm-6 col-lg-3">
         <div class="metric-card h-100" style="background:#e8f0fe;">
             <div class="metric-value text-primary">{{ mape_threshold }}%</div>
-            <div class="metric-label text-primary">MAPE Alert Threshold</div>
-            <div class="metric-hint text-muted">2018 MAPE ({{ mape_2018 }}%) × 1.20</div>
+            <div class="metric-label text-primary">Max Acceptable % Error</div>
+            <div class="metric-hint text-muted">2018 typical % off ({{ mape_2018 }}%) + 20% buffer</div>
         </div>
     </div>
 </div>
@@ -70,25 +70,25 @@
     <div id="drift-chart"></div>
 </div>
 
-<!-- ── Per-drug drift table ───────────────────────────────────────────── -->
+<!-- ── Per-drug accuracy table ─────────────────────────────────────────── -->
 <div class="table-card">
     <div class="p-3 border-bottom d-flex align-items-center justify-content-between">
-        <h6 class="mb-0 fw-semibold">Per-Drug Drift Analysis</h6>
-        <small class="text-muted">N02BE highlighted as primary drift driver</small>
+        <h6 class="mb-0 fw-semibold">Drug-by-Drug Accuracy Check</h6>
+        <small class="text-muted">N02BE (Paracetamol) is highlighted as the main problem drug</small>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
             <thead>
                 <tr>
                     <th>Drug</th>
-                    <th>Description</th>
-                    <th>MAE 2018</th>
-                    <th>MAE 2019</th>
-                    <th>MAPE 2019</th>
-                    <th>R² 2019</th>
-                    <th>Change</th>
-                    <th>Status</th>
-                    <th>Action</th>
+                    <th>What It Treats</th>
+                    <th title="On average, forecast was off by this many units in 2018">Avg Error 2018 <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
+                    <th title="On average, forecast was off by this many units in 2019">Avg Error 2019 <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
+                    <th title="On average, what % was the forecast off in 2019?">% Off 2019 <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
+                    <th title="How well did the forecast match the real trend? 1.0 = perfect, negative = very poor">Accuracy Score <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
+                    <th>Error Change</th>
+                    <th>Forecast Status</th>
+                    <th>Chart</th>
                 </tr>
             </thead>
             <tbody>
@@ -101,14 +101,14 @@
                         {% endif %}
                     </td>
                     <td class="text-muted small">
-                        {% if row.Drug == "M01AB" %}Anti-inflammatory (Acetic)
-                        {% elif row.Drug == "M01AE" %}Anti-inflammatory (Propionic)
-                        {% elif row.Drug == "N02BA" %}Analgesics – Salicylic acid
-                        {% elif row.Drug == "N02BE" %}Analgesics – Paracetamol
-                        {% elif row.Drug == "N05B"  %}Anxiolytics
-                        {% elif row.Drug == "N05C"  %}Hypnotics & Sedatives
-                        {% elif row.Drug == "R03"   %}Obstructive airway drugs
-                        {% elif row.Drug == "R06"   %}Antihistamines
+                        {% if row.Drug == "M01AB" %}Pain & swelling relief
+                        {% elif row.Drug == "M01AE" %}Pain & swelling relief
+                        {% elif row.Drug == "N02BA" %}Pain relief (Aspirin)
+                        {% elif row.Drug == "N02BE" %}Pain relief (Paracetamol)
+                        {% elif row.Drug == "N05B"  %}Anxiety relief
+                        {% elif row.Drug == "N05C"  %}Sleep aids
+                        {% elif row.Drug == "R03"   %}Breathing / Asthma
+                        {% elif row.Drug == "R06"   %}Allergy relief
                         {% else %}—{% endif %}
                     </td>
                     <td>{{ row.MAE_2018 }}</td>
@@ -132,9 +132,9 @@
                     </td>
                     <td>
                         {% if 'Degraded' in row.Status %}
-                        <span class="badge badge-degraded text-white">Degraded</span>
+                        <span class="badge badge-degraded text-white">⚠ Less Accurate</span>
                         {% else %}
-                        <span class="badge badge-stable text-white">Stable</span>
+                        <span class="badge badge-stable text-white">✓ On Track</span>
                         {% endif %}
                     </td>
                     <td>
@@ -152,24 +152,24 @@
 
 <!-- ── Recommendations ────────────────────────────────────────────────── -->
 <div class="chart-card mt-4">
-    <h6 class="fw-semibold mb-3"><i class="bi bi-lightbulb me-2 text-warning"></i>Recommendations</h6>
+    <h6 class="fw-semibold mb-3"><i class="bi bi-lightbulb me-2 text-warning"></i>What Should We Do?</h6>
     <div class="row g-3">
         <div class="col-md-4">
             <div class="p-3 rounded" style="background:#fff8e1;">
-                <div class="fw-semibold mb-1"><i class="bi bi-arrow-repeat me-1"></i>Retrain Periodically</div>
-                <small class="text-muted">Retrain the model annually using the most recent 4 years of data to capture demand shifts.</small>
+                <div class="fw-semibold mb-1"><i class="bi bi-arrow-repeat me-1"></i>Update the Model Regularly</div>
+                <small class="text-muted">Re-teach the system every year using the most recent 4 years of sales data so it can adapt to changes in demand.</small>
             </div>
         </div>
         <div class="col-md-4">
             <div class="p-3 rounded" style="background:#fdf0f0;">
-                <div class="fw-semibold mb-1"><i class="bi bi-bell me-1"></i>Monitor N02BE</div>
-                <small class="text-muted">Paracetamol showed a demand surge (+175,000% MAE change). Monitor external demand drivers (outbreaks, policy).</small>
+                <div class="fw-semibold mb-1"><i class="bi bi-bell me-1"></i>Watch Paracetamol (N02BE)</div>
+                <small class="text-muted">Paracetamol sales jumped dramatically in 2019. This could be due to disease outbreaks or policy changes — keep a close eye on its demand.</small>
             </div>
         </div>
         <div class="col-md-4">
             <div class="p-3 rounded" style="background:#e9f7ef;">
-                <div class="fw-semibold mb-1"><i class="bi bi-shield-check me-1"></i>Stable Drugs</div>
-                <small class="text-muted">N05C and R03 remain reliably predicted. Continue using the current model for these drugs without retraining.</small>
+                <div class="fw-semibold mb-1"><i class="bi bi-shield-check me-1"></i>Reliable Drugs</div>
+                <small class="text-muted">Sleep aids (N05C) and breathing drugs (R03) are still being forecast accurately. No changes needed for these.</small>
             </div>
         </div>
     </div>

@@ -10,7 +10,7 @@
 <div class="d-flex align-items-center justify-content-between mb-3">
     <div>
         <h4 class="mb-0 fw-bold">Live Forecast</h4>
-        <small class="text-muted">Generate a demand forecast using the trained XGBoost model</small>
+        <small class="text-muted">Get a predicted sales quantity for any drug and week — powered by the trained forecasting model</small>
     </div>
 </div>
 
@@ -41,7 +41,7 @@
                         {% endfor %}
                     </select>
                     <div class="form-text text-muted">
-                        ⚠ N02BE shows high drift in 2019. Forecasts may be unreliable.
+                        ⚠ N02BE (Paracetamol) became much harder to predict in 2019 — treat its forecast with caution.
                     </div>
                 </div>
 
@@ -55,7 +55,7 @@
                            max="2025-12-31"
                            required>
                     <div class="form-text text-muted">
-                        Must be after at least 52 weeks of historical data for this drug.
+                        Pick any week — the system needs at least 1 year of past sales data before it can forecast.
                     </div>
                 </div>
 
@@ -138,9 +138,9 @@
                 </div>
                 <div class="text-muted mt-1">predicted units for week of {{ result.date }}</div>
                 <div class="mt-2 text-secondary" style="font-size:.85rem;">
-                    95% range: <strong>{{ result.lower_bound }}</strong>
+                    Expected range: <strong>{{ result.lower_bound }}</strong>
                     – <strong>{{ result.upper_bound }}</strong> units
-                    <span class="ms-2 text-muted">(± 2 × MAE<sub>2018</sub>)</span>
+                    <span class="ms-2 text-muted">(based on typical forecast error)</span>
                 </div>
             </div>
 
@@ -149,7 +149,7 @@
                 <div class="col-6">
                     <div class="p-2 rounded" style="background:#f0faf0;">
                         <div class="fw-bold text-success fs-5">{{ result.seasonal_avg }}</div>
-                        <div class="text-muted" style="font-size:.75rem;">Seasonal Average<br>(same ISO week, past years)</div>
+                        <div class="text-muted" style="font-size:.75rem;">Typical Sales<br>(same week in previous years)</div>
                     </div>
                 </div>
                 <div class="col-6">
@@ -163,8 +163,8 @@
             {% if result.drug == "N02BE" %}
             <div class="alert alert-warning mt-3 mb-0 py-2 px-3" style="font-size:.82rem;">
                 <i class="bi bi-exclamation-triangle me-1"></i>
-                <strong>High Drift Warning:</strong> N02BE showed +174,929% MAE increase in 2019 due to a demand surge.
-                This forecast should be treated with caution.
+                <strong>Caution — Paracetamol (N02BE):</strong> Sales of this drug jumped dramatically in 2019 in a way the system had never seen before.
+                This forecast may not be reliable — use it as a rough guide only.
             </div>
             {% endif %}
         </div>
@@ -173,20 +173,20 @@
         <div class="chart-card">
             <div class="row text-center g-0">
                 <div class="col border-end py-2">
-                    <div class="fw-semibold text-success">{{ result.mae_2018 }}</div>
-                    <div class="text-muted" style="font-size:.72rem;">MAE (2018 Validation)</div>
+                    <div class="fw-semibold text-success">{{ result.mae_2018 }} units</div>
+                    <div class="text-muted" style="font-size:.72rem;">Avg error in 2018</div>
                 </div>
                 <div class="col border-end py-2">
                     <div class="fw-semibold text-primary">XGBoost</div>
-                    <div class="text-muted" style="font-size:.72rem;">Model Type</div>
+                    <div class="text-muted" style="font-size:.72rem;">Forecasting method</div>
                 </div>
                 <div class="col border-end py-2">
                     <div class="fw-semibold">2014–2017</div>
-                    <div class="text-muted" style="font-size:.72rem;">Training Period</div>
+                    <div class="text-muted" style="font-size:.72rem;">Learned from</div>
                 </div>
                 <div class="col py-2">
-                    <div class="fw-semibold text-success">0.9922</div>
-                    <div class="text-muted" style="font-size:.72rem;">R² (2018)</div>
+                    <div class="fw-semibold text-success">99%</div>
+                    <div class="text-muted" style="font-size:.72rem;">Accuracy in 2018</div>
                 </div>
             </div>
         </div>
@@ -209,7 +209,7 @@
                             <th>Date</th>
                             <th>Prediction</th>
                             <th>Range</th>
-                            <th>MAE₂₀₁₈</th>
+                            <th title="Average forecast error from 2018 training">Avg Error (2018) <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
                         </tr>
                     </thead>
                     <tbody>
