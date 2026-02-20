@@ -715,6 +715,3 @@ The notebooks must be run in the following order:
    final test year prevented overfitting and produced honest, reportable
    results suitable for academic publication.
 
-================================================================================
-END OF DOCUMENT
-================================================================================
