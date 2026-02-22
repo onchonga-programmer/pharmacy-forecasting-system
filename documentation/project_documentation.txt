@@ -334,34 +334,48 @@ Notebook: notebooks/pharmacy_sarima_model.ipynb
 SARIMA (Seasonal ARIMA) models were fitted individually per drug, with
 automatic order selection (AIC-based grid search).
 
-Model orders selected per drug:
+Model orders selected per drug (auto_arima with s=52, AIC criterion):
 
-  Drug   | ARIMA Order  | Seasonal Order       | AIC
-  -------+--------------+----------------------+--------
-  M01AB  | (0,0,0)      | (0,1,0,52)           | 192.7
-  M01AE  | (0,0,0)      | (0,1,0,52)           | 197.8
-  N02BA  | (2,1,0)      | (1,1,1,52)           | 1372.65
-  N02BE  | (0,0,0)      | (0,1,0,52)           | 479.59
-  N05B   | (1,0,0)      | (1,1,1,52)           | 1204.49
-  N05C   | (0,0,0)      | (1,1,0,52)           | 425.4
-  R03    | (1,0,0)      | (1,1,0,52)           | 940.06
-  R06    | (2,1,1)      | (1,1,1,52)           | 1342.73
+  Drug   | ARIMA Order  | Seasonal Order       | AIC      | n_train | LB_ok
+  -------+--------------+----------------------+----------+---------+-------
+  M01AB  | (1,0,1)      | (1,1,0,52)           | 1176.89  |  209    | False
+  M01AE  | (1,0,1)      | (1,1,0,52)           | 1097.57  |  209    | True
+  N02BA  | (1,0,1)      | (1,1,0,52)           | 1082.32  |  209    | True
+  N02BE  | (1,1,2)      | (0,1,0,52)           |  315.75  |  174    | True
+  N05B   | (0,0,0)      | (1,1,1,52)           |  859.10  |  149    | False
+  N05C   | (0,0,0)      | (0,1,0,52)           |  291.54  |  108    | False
+  R03    | (1,0,0)      | (1,1,0,52)           |  615.20  |  119    | False
+  R06    | (3,1,0)      | (1,1,1,52)           |  536.72  |  129    | True
 
-SARIMA Results (2018 validation period, per drug):
+  Note: n_train is the post-structural-break training length. Drugs with
+  n_train < 156 weeks have fewer than 3 full seasonal cycles, making
+  s=52 unreliable. This explains the degenerate (0,0,0) orders for N05C
+  and N05B — auto_arima could not find useful AR/MA patterns.
+  LB_ok = True means residuals passed the Ljung-Box white-noise test.
 
-  Drug   |  MAE   | MAPE   | WMAPE  |   R²
-  -------+--------+--------+--------+---------
-  M01AB  |  6.36  | 19.12% | 18.31% | -0.584
-  M01AE  |  6.43  | 24.64% | 24.19% | -0.829
-  N02BA  |  6.28  | 36.72% | 31.52% | -0.636
-  N02BE  |  0.00  |  0.00% |  0.00% |  1.000  ← anomalous (likely data issue)
-  N05B   | 13.16  | 22.30% | 22.01% | -0.965
-  N05C   |  4.05  | 65.86% | 69.20% | -2.767
-  R03    | 26.09  | 32.28% | 35.25% | -2.010
-  R06    |  7.24  | 70.86% | 54.21% | -0.910
+SARIMA Results (2018 test period, per drug, sorted by WMAPE):
 
-  Note: N02BE shows perfect SARIMA predictions (0 error) which is anomalous.
-  SARIMA generally underperformed XGBoost significantly across all drugs.
+  Drug   | Segment |  MAE   | RMSE   | WMAPE  | MAPE   |   R²     | Beats Baseline
+  -------+---------+--------+--------+--------+--------+----------+---------------
+  N02BE  | High    |  0.42  |  1.36  |  0.42% |  0.42% |  0.0000  | ✅ Yes
+  M01AE  | Medium  |  5.23  |  6.80  | 19.99% | 21.13% | -0.3926  | ✅ Yes
+  M01AB  | Medium  |  7.86  | 10.18  | 23.30% | 25.61% | -1.0591  | ❌ No
+  N05B   | High    | 17.23  | 21.42  | 27.80% | 28.29% | -1.5876  | ❌ No
+  N02BA  | Medium  |  6.62  |  8.81  | 31.40% | 37.27% | -1.4370  | ✅ Yes
+  R06    | Medium  |  7.52  | 10.29  | 33.22% | 37.43% |  0.4187  | ❌ No
+  R03    | Medium  | 18.84  | 25.31  | 37.23% | 45.69% | -0.1314  | ❌ No
+  N05C   | Low     |  3.51  |  4.79  | 64.26% | 58.65% | -0.6376  | ✅ Yes
+
+  SARIMA beats Holt-Winters baseline (MAE=6.91) for 4/8 drugs.
+  Negative R² values indicate the model is worse than predicting the mean.
+  6/8 drugs have negative R², confirming SARIMA is not a reliable model
+  for this dataset — primarily due to insufficient data for s=52.
+
+  Key issues:
+  - N05B and R03 produced degenerate orders (0,0,0)/(1,0,0) — SARIMA gave up
+  - Short post-break training windows (108–149 weeks) = <3 annual cycles
+  - SARIMA is dominated by the seasonal differencing (D=1, s=52) in these cases
+  - XGBoost is significantly better suited to this data
 
 Output files:
   - data/results/sarima/sarima_results.csv
@@ -390,30 +404,39 @@ Key hyperparameters (best_params.pkl):
   - Saved to: data/results/xgboost/best_params.pkl
 
 XGBoost 2018 Validation Results (overall, all 8 drugs):
+  Source: data/results/xgboost/validation_2018_metrics.json
+  Training period  : 2014–2017
+  Validation period: 2018
 
   Metric  |  Value
   --------+---------
-  MAE     |  1.74
-  MAPE    |  5.60%
-  WMAPE   |  4.26%
-  R²      |  0.9922
+  MAE     |  1.81
+  MAPE    |  6.23%
+  R²      |  0.9913
 
-XGBoost 2018 Validation Results (per drug):
+XGBoost 2018 Validation Results (per drug, sorted by WMAPE):
+  Source: data/results/xgboost/xgboost_results.csv
 
   Drug   | Volume   |  MAE  |  RMSE |  MAPE  | WMAPE  |   R²
   -------+----------+-------+-------+--------+--------+-------
-  M01AB  | Medium   | 1.06  | 1.38  |  3.24% |  3.15% | 0.962
-  M01AE  | Medium   | 0.74  | 0.90  |  3.04% |  2.82% | 0.975
-  N02BA  | Medium   | 1.15  | 1.44  |  5.52% |  5.45% | 0.935
-  N02BE  | High     | 1.02  | 1.02  |  1.02% |  1.02% | 0.000  ← note below
-  N05B   | High     | 3.51  | 4.53  |  5.51% |  5.67% | 0.885
-  N05C   | Low      | 0.93  | 1.15  | 16.14% | 17.01% | 0.906
-  R03    | Medium   | 3.78  | 4.69  |  8.58% |  7.47% | 0.961
-  R06    | Medium   | 1.63  | 2.47  |  8.74% |  7.18% | 0.966
+  N02BE  | High     | 0.17  | 0.17  |  0.17% |  0.17% | 0.000  ← ⚠ see note
+  M01AE  | Medium   | 0.70  | 0.90  |  2.70% |  2.67% | 0.976
+  M01AB  | Medium   | 1.10  | 1.34  |  3.37% |  3.27% | 0.964
+  N05B   | High     | 4.20  | 4.98  |  6.75% |  6.77% | 0.860
+  R03    | Medium   | 3.49  | 4.83  |  8.09% |  6.89% | 0.959
+  N02BA  | Medium   | 1.66  | 1.97  |  7.99% |  7.86% | 0.878
+  R06    | Medium   | 2.01  | 2.40  | 10.72% |  8.89% | 0.969
+  N05C   | Low      | 0.98  | 1.29  | 17.31% | 17.88% | 0.882
 
-  Note: N02BE shows R²=0 at validation — suggesting the validation split
-  contained a flat or near-constant segment that was correctly predicted
-  but with no variance to explain.
+  ⚠ IMPORTANT NOTE on N02BE 2018 MAE=0.17:
+  The data cleaning pipeline (data_cleaning.ipynb) winsorized (capped)
+  N02BE sales at 99.625 units/week. In the 2018 test split, ALL N02BE
+  rows had total_quantity = 99.625 (a constant). The model trivially
+  predicted ≈99.625 for every row, yielding a near-zero MAE that is an
+  ARTEFACT of the capping — not genuine model skill.
+  The R²=0.000 confirms this: there is zero variance to explain in a
+  constant series. This limitation was identified during the 2019 validation
+  debugging phase and is documented in Bug 7 (Section 14).
 
 Saved model files:
   - data/results/xgboost/xgboost_final_model.pkl
@@ -452,26 +475,46 @@ Benchmark thresholds (dynamically computed):
   - MAPE threshold = mape_2018 × 1.20  = 5.6% × 1.20 = 6.72%
   - R² threshold   = r2_2018   × 0.95  = 0.99 × 0.95 = 0.94
 
-2019 Overall Results:
+2019 Overall Results (raw, uncapped inference):
+  Source: data/results/validation_2019/2019_predictions.csv
 
   Metric  | 2018 (Validation) | 2019 (Test) | Change
   --------+-------------------+-------------+----------
-  MAE     |       1.74        |    18.83    | +982.2%
-  MAPE    |       5.60%       |    19.93%   | +255.9%
-  R²      |       0.9922      |     0.4143  |  -58.2%
+  MAE     |       1.81        |    18.69    | +932.6%
+  MAPE    |       6.23%       |    19.44%   | +212.0%
+  WMAPE   |        —          |    35.98%   |    —
+  R²      |       0.9913      |     0.3966  |  -60.0%
+
+  Verdict: ❌ VALIDATION FAILED — significant model drift detected
+  (Note: N02BE is the primary driver — see Section 13 for root cause)
 
 2019 Per-Drug Results:
 
-  Drug   | MAE 2018 | MAE 2019 | MAPE 2019 |  R² 2019 | Change % | Status
-  -------+----------+----------+-----------+----------+----------+----------
-  M01AB  |   0.83   |   5.70   |   17.15%  |   0.424  | +586.7%  | Degraded
-  M01AE  |   0.97   |   3.77   |   16.32%  |   0.836  | +288.7%  | Degraded
-  N02BA  |   1.15   |   3.50   |   16.89%  |   0.524  | +204.3%  | Degraded
-  N02BE  |   0.07   |  122.52  |   61.99%  |  -1.623  |+174929%  | Degraded ⚠
-  N05B   |   1.95   |   6.54   |   11.50%  |   0.598  | +235.4%  | Degraded
-  N05C   |   0.77   |   0.52   |    8.64%  |   0.938  |  -32.5%  | Excellent ✓
-  R03    |   4.69   |   5.47   |   10.52%  |   0.903  |  +16.6%  | Excellent ✓
-  R06    |   0.68   |   3.36   |   14.59%  |   0.902  | +394.1%  | Degraded
+  Drug   | MAE 2018 | MAE 2019 | MAPE 2019 |  R² 2019 | Change %  | Status
+  -------+----------+----------+-----------+----------+-----------+----------
+  N05C   |   0.98   |   0.80   |   16.01%  |   0.79   |  -18.4%   | ✅ Excellent
+  R06    |   2.01   |   2.16   |    8.17%  |   0.95   |   +7.5%   | ✅ Excellent
+  M01AE  |   0.70   |   2.85   |   13.04%  |   0.88   | +307.1%   | ❌ Degraded
+  N02BA  |   1.66   |   2.91   |   13.62%  |   0.64   |  +75.3%   | ❌ Degraded
+  M01AB  |   1.10   |   4.44   |   15.13%  |   0.62   | +303.6%   | ❌ Degraded
+  R03    |   3.49   |   6.25   |   11.69%  |   0.89   |  +79.1%   | ❌ Degraded
+  N05B   |   4.20   |   8.29   |   14.80%  |   0.32   |  +97.4%   | ❌ Degraded
+  N02BE  |   0.17   | 121.39   |   60.46%  |  -1.69   |+71305.9%  | ❌ Degraded ⚠
+
+  Summary: 2/8 drugs excellent, 0/8 acceptable, 6/8 degraded
+
+Quarterly Analysis (all drugs combined):
+
+  Quarter | MAE   | RMSE  | WMAPE  |  R²  | Weeks
+  --------+-------+-------+--------+------+------
+  Q1 2019 | 29.83 | 76.45 | 44.24% | 0.28 |  12
+  Q2 2019 | 14.73 | 31.64 | 30.82% | 0.48 |  13
+  Q3 2019 | 13.44 | 35.97 | 29.82% | 0.55 |  14
+  Q4 2019 | 11.52 | 21.88 | 60.62% | 0.46 |   1
+
+  MAE improves Q1→Q3 because N02BE's extreme January spike (Actual=478)
+  falls back to ~120 by Q3, reducing absolute error per week.
+  Q4 has only 1 week and is not statistically representative.
 
 Quarterly Analysis:
   Results saved in: data/results/validation_2019/2019_quarterly_analysis.csv
@@ -499,11 +542,15 @@ Model Comparison — 2018 Validation MAE (lower is better):
     7  | Seasonal Naive |   9.21
     8  | SARIMA (avg)   |  ~8.0       ← Highly variable per drug
 
-XGBoost achieves 75% lower MAE than the best baseline (Holt-Winters).
+XGBoost achieves 74% lower MAE than the best baseline (Holt-Winters).
 
 XGBoost Final Performance:
-  - 2018 Validation : MAE=1.74, MAPE=5.6%,  R²=0.99  → Strong predictive fit
-  - 2019 Final Test : MAE=18.83, MAPE=19.9%, R²=0.41  → Significant drift
+  - 2018 Validation : MAE=1.81, MAPE=6.23%, R²=0.9913 → Strong predictive fit
+  - 2019 Final Test : MAE=18.69, MAPE=19.44%, R²=0.40  → Significant drift
+    (primary driver: N02BE outlier-capping feature mismatch — see Section 13)
+
+Without N02BE, estimated 2019 MAE for remaining 7 drugs ≈ 3.84
+  (N05C=0.80, R06=2.16, M01AE=2.85, N02BA=2.91, M01AB=4.44, R03=6.25, N05B=8.29)
 
 
 ================================================================================
@@ -512,39 +559,78 @@ XGBoost Final Performance:
 
 The XGBoost model shows significant performance degradation from 2018 to 2019.
 
-Primary Driver: N02BE (Paracetamol — High Volume)
-  - 2018 MAE: 0.07  (near-perfect predictions)
-  - 2019 MAE: 122.52 (catastrophic failure)
-  - Cause: N02BE experienced a demand surge in 2019 that was not present in
-           the 2014-2017 training data. The model learned to predict the
-           historical baseline (~70 units/week) but actual 2019 demand
-           averaged ~193 units/week — approximately 2.7x the training mean.
-  - This is genuine CONCEPT DRIFT, not a modelling error.
+Primary Driver: N02BE — Feature Engineering Pipeline Mismatch (Bug 7)
+  - 2018 MAE: 0.17  (appeared near-perfect — this was an ARTEFACT)
+  - 2019 MAE: 121.39 (catastrophic failure)
 
-Secondary Drivers:
-  - M01AB, M01AE, N02BA, N05B, R06 all show moderate degradation (+200-600%)
-  - These are likely due to small distributional shifts accumulated over time
+  ROOT CAUSE (confirmed by debugging in model_validation_2019.ipynb):
+  The data cleaning pipeline (data_cleaning.ipynb) applied winsorization
+  (outlier capping) to raw sales quantities. For N02BE, this capped all
+  values at 99.625 units/week.
+
+  Evidence:
+    - train_xgboost.csv N02BE range : 92.0 – 99.625  (all capped)
+    - test_xgboost.csv  N02BE range : 99.625 – 99.625 (constant — ALL rows)
+    - Database raw 2019 N02BE range : 86 – 546
+
+  The 2018 "validation" had N02BE as a constant series (all = 99.625).
+  The model predicted ≈ 99.625 for every row → MAE = 0.17 was trivially
+  achieved by predicting the constant. R² = 0.000 confirms this: there
+  was no variance to explain.
+
+  In 2019, the validation notebook queried raw uncapped database values
+  and used them directly to compute lag features (lag_1 = 289, lag_52 = 255).
+  These values are completely out-of-distribution for a model trained on
+  capped data (where lag features were always ≤ 99.625). The model predicted
+  ≈ 71 when the actual was ≈ 354 → MAE = 121.39.
+
+  This is a FEATURE ENGINEERING PIPELINE MISMATCH, not concept drift.
+  The 2019 actual N02BE mean is 193, which is lower than the historical
+  mean of 208 — so demand did NOT surge; the pipeline simply forgot to
+  apply the same cap that was present during training.
+
+  Fix applied (model_validation_2019.ipynb, debug cell):
+    1. Learn per-drug caps from train_xgboost.csv (e.g., N02BE cap = 99.625)
+    2. Cap df_full (2014–2019 history) before computing lag/rolling features
+    3. Cap df_2019 actuals for a fair apples-to-apples comparison
+    4. Rebuild all lag/rolling features using capped history
+    5. Re-run predictions with corrected features
+
+Other Drug Degradation (moderate, genuine drift):
+  - M01AB (+303.6%), M01AE (+307.1%), N02BA (+75.3%), N05B (+97.4%),
+    R06 (+394.1%), R03 (+79.1%) all show moderate degradation
+  - These are consistent with real distributional shift over 2+ years
+    (model trained to 2017, tested in 2019)
+  - None have the extreme factor seen in N02BE
 
 Stable Drugs (model remained reliable):
-  - N05C : MAE improved from 0.77 to 0.52 (-32.5%)  ← More predictable in 2019
-  - R03  : MAE increased only marginally (+16.6%)   ← Seasonal pattern stable
+  - N05C : MAE improved from 0.98 to 0.80 (-18.4%) ← Very stable demand
+  - R06  : MAE increased only +7.5%               ← Seasonal pattern stable
 
 Interpretation for Thesis:
-  The XGBoost model successfully learned the demand patterns present in the
-  2014-2017 training data, achieving an R² of 0.99 on the 2018 held-out
-  validation set. However, evaluation on the completely unseen 2019 test set
-  revealed significant model drift, with overall MAE increasing by 982%.
-  The primary driver was N02BE (paracetamol), which experienced a demand
-  surge in 2019 that far exceeded historical patterns. This finding
-  demonstrates the importance of periodic model retraining and real-time
-  drift monitoring in pharmacy forecasting systems — a key deployment
-  consideration for production use.
+  The XGBoost model achieved R²=0.9913 on the 2018 held-out validation set,
+  demonstrating strong in-distribution predictive performance. The 2019
+  out-of-sample test revealed two distinct failure modes:
+
+  (a) Pipeline inconsistency (N02BE): The outlier capping applied during
+      data cleaning was not reproduced during 2019 inference, causing
+      lag features to be orders of magnitude outside the model's training
+      distribution. This highlights the critical importance of encapsulating
+      all preprocessing steps in a reproducible inference pipeline.
+
+  (b) Genuine temporal drift (remaining 6 drugs): Moderate degradation
+      (+75–394%) reflects real changes in demand patterns over the
+      2018-2019 period and demonstrates the need for periodic retraining
+      in production pharmacy forecasting systems.
 
 Recommendations:
-  1. Implement drift detection: alert if weekly MAE exceeds 1.20 × 2018 MAE
+  1. Fix inference pipeline: apply identical outlier caps (from training
+     data) to all lag/rolling features before scoring new data
   2. Retrain model annually with the most recent 4 years of data
-  3. N02BE specifically should be monitored for external demand drivers
-     (e.g., disease outbreaks, seasonal illness patterns, policy changes)
+  3. Implement drift detection: alert if rolling 4-week MAE exceeds
+     1.20 × the 2018 per-drug baseline
+  4. Consider retraining on uncapped data so the model can handle the
+     full demand range for high-volume drugs (N02BE, N05B)
 
 
 ================================================================================
@@ -594,12 +680,49 @@ The following technical issues were identified and resolved during development:
     - Problem : model_validation_2019.ipynb had hardcoded 2018 metrics
                 (MAE=1.40, per-drug MAEs) from an earlier training run.
                 After retraining on 2014-2017, the actual 2018 results
-                changed to MAE=1.74 — making all comparisons incorrect.
+                changed to MAE=1.81 — making all comparisons incorrect.
     - Fix     : Replaced all hardcoded values with dynamic loading from:
                   - validation_2018_metrics.json  (overall metrics)
                   - xgboost_results.csv           (per-drug metrics)
-                All thresholds (e.g., MAE < 2.09) are now computed at
+                All thresholds (e.g., MAE < 2.17) are now computed at
                 runtime as mae_2018 × 1.20.
+
+  Bug 7: Training Outlier Cap Not Applied to 2019 Inference Pipeline
+    - Problem : The data cleaning pipeline winsorized (capped) sales
+                quantities per drug to remove outliers before training.
+                For N02BE, this cap was 99.625 units/week. In the 2018
+                test split, ALL N02BE values were exactly 99.625 (constant).
+                The model learned to predict ≈ 99.625 for N02BE — giving
+                an artefactual MAE of 0.17 (near-zero error on a constant).
+
+                In model_validation_2019.ipynb, the 2019 data was loaded
+                directly from the database (raw, uncapped values up to 546)
+                and lag features were computed from this raw history
+                (lag_1 = 289 instead of ≤ 99.625). These values were
+                completely out-of-distribution for the trained model,
+                causing predictions of ≈ 71 against actuals of ≈ 354,
+                producing MAE = 121.39.
+
+    - Confirmed by:
+                  • train_xgboost.csv N02BE range: 92.0 – 99.625
+                  • test_xgboost.csv  N02BE range: 99.625 – 99.625 (constant)
+                  • Database 2019 N02BE range    : 86 – 546 (raw)
+                  • Encoding sensitivity test: prediction unchanged across
+                    all drug_name_encoded values (0–7) → encoding not the cause
+                  • lag_1 mismatch confirmed: stored 289.0, expected ≤ 99.625
+
+    - Fix     : In model_validation_2019.ipynb (debug section):
+                  1. Learn per-drug caps from train_xgboost.csv
+                  2. Apply caps to df_full before computing lag/rolling features
+                  3. Apply caps to df_2019 actuals for fair comparison
+                  4. Rebuild all lag/rolling/EWM features from capped history
+                  5. Re-score with corrected feature matrix
+
+    - Lesson  : Any preprocessing step applied during training (scaling,
+                capping, encoding) MUST be reproduced identically during
+                inference. Saving the cap values alongside the model
+                (e.g., in a preprocessing_config.json) is recommended
+                for all future pipelines.
 
 
 ================================================================================
@@ -685,19 +808,25 @@ The notebooks must be run in the following order:
 ================================================================================
 
 1. XGBoost Outperforms All Baselines on 2018 Validation
-   XGBoost achieved MAE=1.74 vs the best baseline (Holt-Winters) at MAE=6.91
-   — a 75% improvement. R²=0.99 confirms the model captured nearly all
-   variance in the 2018 data.
+   XGBoost achieved MAE=1.81 vs the best baseline (Holt-Winters) at MAE=6.91
+   — a 74% improvement. R²=0.9913 confirms the model captured nearly all
+   variance in the 2018 data. XGBoost also significantly outperformed SARIMA
+   (4/8 drugs beat baseline) across all volume segments.
 
-2. Significant Model Drift in 2019
-   The 2019 out-of-sample test revealed +982% MAE degradation, confirming
-   that demand patterns shifted substantially from the training period.
+2. 2019 Validation Revealed Pipeline Bug and Genuine Drift
+   The 2019 out-of-sample test showed +932% overall MAE degradation. Debugging
+   revealed TWO distinct causes:
+   (a) Pipeline bug (N02BE): Training data was winsorized at 99.625/week but
+       the inference notebook used raw uncapped values — lag features were
+       completely out-of-distribution for the trained model.
+   (b) Genuine temporal drift (6 other drugs): +75–394% degradation over the
+       2018–2019 period, consistent with real demand shifts.
 
-3. Drift is Drug-Specific
-   N02BE (paracetamol) is almost entirely responsible for the overall
-   degradation. Two drugs (N05C, R03) remained well-predicted in 2019,
-   showing that the model is not universally broken — the demand environment
-   for specific drugs changed.
+3. N02BE 2018 "Perfect" Score Was an Artefact
+   The reported MAE=0.17 for N02BE in 2018 was not real model skill — the
+   entire 2018 test split for N02BE was a constant value (99.625), making
+   trivial prediction possible. R²=0.000 confirmed zero explainable variance.
+   The true 2018 model skill for N02BE cannot be assessed from capped data.
 
 4. Model Needs Periodic Retraining
    The 2019 results demonstrate the necessity of a model monitoring and
