@@ -629,8 +629,94 @@ Recommendations:
   2. Retrain model annually with the most recent 4 years of data
   3. Implement drift detection: alert if rolling 4-week MAE exceeds
      1.20 × the 2018 per-drug baseline
-  4. Consider retraining on uncapped data so the model can handle the
-     full demand range for high-volume drugs (N02BE, N05B)
+  4. Retrain XGBoost on uncapped (raw) data — full explanation below
+
+  ---
+  RECOMMENDATION 4 IN DETAIL:
+  Why XGBoost Should Be Retrained on Uncapped Data
+  ---
+
+  The data cleaning pipeline applied winsorization (outlier capping) before
+  both SARIMA and XGBoost were trained. This was the right choice for SARIMA
+  but the wrong choice for XGBoost, for fundamentally different reasons.
+
+  Why capping was APPROPRIATE for SARIMA:
+    SARIMA is a linear parametric model. It estimates additive components
+    (trend, seasonal, error) by fitting coefficients to the observed series.
+    A single extreme spike directly distorts those coefficient estimates —
+    for example, one week where N02BE = 450 can inflate the seasonal
+    coefficient for that calendar week across all future predictions.
+    SARIMA has no built-in mechanism to discount individual extreme values.
+    Winsorizing the training data before fitting SARIMA is therefore standard
+    practice: it prevents a small number of anomalous weeks from biasing the
+    model's understanding of "normal" seasonal demand.
+
+  Why capping was HARMFUL for XGBoost:
+    XGBoost is a tree-based ensemble model. Decision trees partition the
+    feature space into rectangular regions by learning split thresholds
+    (e.g., "if lag_1 > 180 then go right"). This means:
+
+    (a) Trees are inherently robust to outliers in the TARGET variable.
+        A large y-value does not distort splits — it simply becomes a leaf
+        node with a high predicted value. Unlike linear models, XGBoost does
+        not need the target to be bounded in order to produce stable estimates.
+
+    (b) Trees REQUIRE the training and inference feature distributions to
+        match. If the model is trained on data where lag_1 ≤ 99.625, it will
+        have learned splits only within that range (e.g., "lag_1 > 97" or
+        "lag_1 > 95"). When presented with lag_1 = 289 at inference time,
+        every split threshold it learned is below that value, so the input
+        falls into the rightmost leaf of every tree — a leaf that was only
+        ever trained on values ≈ 99. The model cannot extrapolate; it returns
+        its highest-seen prediction (~71 units) rather than anything near the
+        true value of ~354.
+
+    (c) Capping destroyed real signal. N02BE's raw range is 86–546 units/week.
+        Capping at 99.625 compressed 68% of the actual demand range into a
+        single boundary value. The model never learned that demand can be 200,
+        300, or 500 units/week, nor what feature patterns (e.g., high lagged
+        values, seasonality, trend) correspond to those high-demand periods.
+        If retrained on uncapped data, XGBoost would learn splits such as:
+          "if lag_1 > 200 AND month_sin > 0.8 → predict 380"
+        which would be far more useful for real-world pharmacy restocking.
+
+  The right approach for XGBoost:
+    Option A — Train on raw uncapped data (recommended):
+      Remove the winsorization step from the XGBoost branch of the pipeline.
+      XGBoost's gradient boosting objective is robust to large values because
+      individual trees are shallow (max_depth=5–6) and the learning rate
+      shrinks each tree's contribution. The ensemble averages out any single
+      tree overfit to an extreme value.
+      Expected outcome: the model correctly learns the N02BE high-demand
+      regime (lag_1 ≥ 200 → high predicted sales), and 2019 MAE is expected
+      to fall sharply from 121.39 to a level comparable to other drugs.
+
+    Option B — Apply log transformation instead of capping:
+      Replace winsorization with log1p(x) = log(1 + x) on total_quantity.
+      This compresses the tail (reducing the influence of extreme values)
+      without destroying information the way hard capping does.
+      The full range 86–546 maps to 4.46–6.30 in log space — a modest
+      ratio of 1.41×, versus a raw ratio of 6.3×. XGBoost can learn this
+      compressed range easily and predictions are back-transformed with
+      expm1(). This is a common best-practice for count/sales data.
+
+    Option C — Keep capping but apply it consistently (minimal fix):
+      As implemented in the Bug 7 fix, apply the same training-time cap to
+      all inference inputs. This prevents the out-of-distribution failure
+      but does NOT fix the underlying limitation: the model still cannot
+      predict demand above 99.625 for N02BE, which is wrong for 2019.
+      This option is only suitable as a short-term patch.
+
+  Summary for write-up:
+    Outlier capping is a preprocessing step that must be tailored to the
+    model type, not applied uniformly across all models in the pipeline.
+    SARIMA benefits from capping because it is a linear model sensitive to
+    leverage points. XGBoost does not benefit from capping — it is harmed
+    by it, because trees cannot extrapolate beyond the range of values they
+    were trained on. The correct preprocessing strategy for a tree ensemble
+    on pharmaceutical sales data is either to use raw counts directly or to
+    apply a variance-stabilising transformation (log/sqrt) that preserves
+    the ordering and relative magnitude of all demand levels.
 
 
 ================================================================================
@@ -718,11 +804,43 @@ The following technical issues were identified and resolved during development:
                   4. Rebuild all lag/rolling/EWM features from capped history
                   5. Re-score with corrected feature matrix
 
-    - Lesson  : Any preprocessing step applied during training (scaling,
+    - Lesson 1: Any preprocessing step applied during training (scaling,
                 capping, encoding) MUST be reproduced identically during
                 inference. Saving the cap values alongside the model
                 (e.g., in a preprocessing_config.json) is recommended
                 for all future pipelines.
+
+    - Lesson 2: Outlier capping is model-type-dependent and must NOT be
+                applied uniformly across all models in a pipeline.
+
+                SARIMA  → capping HELPS.
+                  SARIMA is a linear parametric model. Extreme values directly
+                  bias its coefficient estimates (trend slope, seasonal
+                  amplitudes). Removing or capping spikes before fitting
+                  prevents a handful of anomalous weeks from dominating the
+                  model's representation of normal seasonal behaviour.
+
+                XGBoost → capping HURTS.
+                  XGBoost is a tree ensemble. Decision trees learn split
+                  thresholds within the observed feature range. If every
+                  training example has lag_1 ≤ 99.625, the model learns splits
+                  only within [0, 99.625]. At inference time, an input of
+                  lag_1 = 289 falls beyond all learned thresholds and maps to
+                  the same extreme leaf as lag_1 = 99 — the model cannot
+                  distinguish the two. This is not overfitting; it is the
+                  fundamental inability of a tree to extrapolate outside its
+                  training range.
+
+                  Furthermore, tree ensembles are inherently robust to large
+                  target values: a week with sales=450 simply becomes a leaf
+                  with a high predicted value; it does not skew the splits of
+                  other leaves. Capping is therefore both unnecessary and
+                  counterproductive for XGBoost.
+
+                  The correct fix for XGBoost is to train on uncapped data
+                  (or log-transformed data), so the model learns the full
+                  demand distribution and can make valid predictions across
+                  the observed range at inference time.
 
 
 ================================================================================
