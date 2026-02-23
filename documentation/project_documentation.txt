@@ -157,18 +157,43 @@ Steps performed:
   2. Parsed and standardised the 'datum' (date) column to datetime format
   3. Renamed columns to English equivalents where needed
   4. Checked for and handled missing values
-  5. Identified and removed outliers using IQR-based method
+  5. Identified and handled outliers using IQR-based method (Cap)
   6. Reshaped data from wide format (one column per drug) to long format
      (drug_name column + quantity column) for modelling compatibility
   7. Saved two cleaned versions:
-       - sales_cleaned.csv           (with outliers retained)
-       - sales_cleaned_no_outliers.csv (outliers removed)
-  8. Created sales_modeling.csv — the main dataset used for all modelling
+       - sales_cleaned.csv           (capped data, all years)
+       - sales_cleaned_no_outliers.csv (outliers removed, all years)
+  8. PIPELINE FORK — two separate modeling files are produced:
+
+     SARIMA / Baseline branch (capped):
+       sales_modeling_sarima.csv  — complete years, outliers capped at IQR
+       Reason: SARIMA and Holt-Winters are linear models; extreme values
+       directly bias their coefficient estimates and seasonal amplitudes.
+       Capping prevents a few anomalous weeks from dominating the model.
+
+     XGBoost branch (uncapped, raw values):
+       sales_modeling_xgboost.csv — complete years, NO capping applied
+       Reason: XGBoost is a tree ensemble. Trees learn split thresholds
+       within the observed feature range. If training data is capped at
+       (e.g.) 99.625, the model cannot predict values above that level at
+       inference time — it cannot extrapolate beyond its training range.
+       Training on raw uncapped data lets the model learn the full demand
+       distribution (e.g., N02BE range 86–546 units/week).
+
+     sales_modeling.csv — legacy alias, mirrors the SARIMA version for
+       backward compatibility.
+
+  This fork was implemented after the 2019 validation revealed that the
+  original single-pipeline approach (capping applied to all models) caused
+  catastrophic failure for N02BE: MAE 0.17 (artefact) → 121.39 in 2019.
+  (See Bug 7 in Section 14 and the full explanation in Section 13.)
 
 Output:
   - data/processed/sales_cleaned.csv
   - data/processed/sales_cleaned_no_outliers.csv
-  - data/processed/sales_modeling.csv
+  - data/processed/sales_modeling_sarima.csv   ← SARIMA / Baseline input
+  - data/processed/sales_modeling_xgboost.csv  ← XGBoost input (uncapped)
+  - data/processed/sales_modeling.csv          ← legacy alias (= SARIMA file)
 
 
 ================================================================================
@@ -198,6 +223,12 @@ Key findings:
 ================================================================================
 
 Notebook: notebooks/pharmacy_sales_feature_engineering.ipynb
+
+Input: data/processed/sales_modeling_xgboost.csv  (raw uncapped values)
+  Note: The feature engineering notebook uses the XGBoost-specific file.
+  This ensures that lag and rolling features are computed from the full
+  uncapped demand range, matching what the model will see at inference time.
+  SARIMA uses its own pre-split file (sales_modeling_sarima.csv) directly.
 
 This notebook transforms the cleaned time-series data into a supervised machine
 learning dataset with 47+ engineered features per observation.
@@ -865,6 +896,9 @@ Key output files and where to find them:
   Feature-engineered validation data    | data/processed/test_xgboost.csv
   Label encoders                        | data/processed/label_encoders.pkl
   Best hyperparameters                  | data/results/xgboost/best_params.pkl
+  SARIMA/Baseline modeling data         | data/processed/sales_modeling_sarima.csv
+  XGBoost modeling data (uncapped)      | data/processed/sales_modeling_xgboost.csv
+  Legacy modeling alias (= SARIMA file) | data/processed/sales_modeling.csv
 
 
 ================================================================================
@@ -878,18 +912,27 @@ The notebooks must be run in the following order:
     Input    : data/raw/salesweekly.csv
     Output   : data/processed/sales_cleaned.csv
                data/processed/sales_cleaned_no_outliers.csv
-               data/processed/sales_modeling.csv
+               data/processed/sales_modeling_sarima.csv   ← capped (SARIMA/Baseline)
+               data/processed/sales_modeling_xgboost.csv  ← uncapped (XGBoost)
+               data/processed/sales_modeling.csv          ← legacy alias
 
   Step 2 — EDA (optional, no output files required for modelling)
     Notebook : notebooks/pharmacy_sales_eda.ipynb
 
   Step 3 — Feature Engineering
     Notebook : notebooks/pharmacy_sales_feature_engineering.ipynb
-    Input    : data/processed/sales_modeling.csv
+    Input    : data/processed/sales_modeling_xgboost.csv  ← uncapped XGBoost file
     Output   : data/processed/train_xgboost.csv, test_xgboost.csv
                data/processed/train_sarima.csv,  test_sarima.csv
                data/processed/train_baseline.csv, test_baseline.csv
                data/processed/label_encoders.pkl
+
+  ⚠ NOTE ON PREPROCESSING SPLIT:
+    Baseline and SARIMA models consume sales_modeling_sarima.csv (IQR-capped).
+    XGBoost consumes sales_modeling_xgboost.csv (no capping).
+    This is intentional — each model gets the preprocessing suited to its
+    assumptions. The evaluation period, drugs, and temporal split are identical
+    across all three models, so the comparison remains fair.
 
   Step 4 — Baseline Models
     Notebook : notebooks/pharmacy_sales_baseline_models.ipynb
@@ -961,4 +1004,19 @@ The notebooks must be run in the following order:
    Using a strict temporal split (no random shuffling) and an independent
    final test year prevented overfitting and produced honest, reportable
    results suitable for academic publication.
+
+7. Preprocessing Must Be Tailored Per Model, Not Applied Uniformly
+   The project originally used a single data cleaning pipeline for all models.
+   This was identified as a fundamental design flaw after the 2019 validation
+   failure for N02BE. The pipeline was refactored to produce two separate
+   modeling files:
+     - sales_modeling_sarima.csv  (IQR-capped) for SARIMA and Holt-Winters
+     - sales_modeling_xgboost.csv (uncapped)   for XGBoost
+   The rationale: SARIMA and Holt-Winters are linear models that benefit from
+   outlier capping. XGBoost is a tree ensemble that requires the full demand
+   range in training data — it cannot extrapolate beyond its training range.
+   This refactoring is expected to eliminate the N02BE OOD failure and produce
+   reliable 2019 out-of-sample predictions for the full demand range.
+   Key lesson: preprocessing decisions are model-specific and must be justified
+   by each model's mathematical assumptions, not applied uniformly.
 
