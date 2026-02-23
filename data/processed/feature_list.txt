@@ -36,10 +36,10 @@ total_quantity_ewm_4
 total_quantity_ewm_13
 total_quantity_ewm_26
 time_index
-pct_change_1w
-pct_change_4w
 diff_1w
 diff_4w
+pct_change_1w
+pct_change_4w
 expanding_mean
 expanding_std
 ratio_to_expanding_mean
