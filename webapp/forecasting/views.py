@@ -277,3 +277,59 @@ def sample_csv(request):
     response = HttpResponse(content, content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="forecast_template.csv"'
     return response
+
+
+# ── Inventory Optimisation ────────────────────────────────────────────────────
+
+def inventory(request):
+    result    = None
+    form_data = {
+        "drug_name":        "M01AB",
+        "current_stock":    "500",
+        "lead_time_weeks":  "2",
+        "service_level":    "95",
+        "unit_cost":        "10.00",
+        "order_cost":       "50.00",
+        "holding_cost_pct": "25",
+    }
+
+    if request.method == "POST":
+        drug_name        = request.POST.get("drug_name", "").strip().upper()
+        current_stock    = request.POST.get("current_stock", "0")
+        lead_time_weeks  = request.POST.get("lead_time_weeks", "2")
+        service_level    = request.POST.get("service_level", "95")
+        unit_cost        = request.POST.get("unit_cost", "10")
+        order_cost       = request.POST.get("order_cost", "50")
+        holding_cost_pct = request.POST.get("holding_cost_pct", "25")
+
+        form_data = {
+            "drug_name":        drug_name,
+            "current_stock":    current_stock,
+            "lead_time_weeks":  lead_time_weeks,
+            "service_level":    service_level,
+            "unit_cost":        unit_cost,
+            "order_cost":       order_cost,
+            "holding_cost_pct": holding_cost_pct,
+        }
+
+        try:
+            result = ml_engine.compute_inventory_recommendation(
+                drug_name         = drug_name,
+                current_stock     = float(current_stock),
+                lead_time_weeks   = int(lead_time_weeks),
+                service_level_pct = float(service_level),
+                unit_cost         = float(unit_cost),
+                order_cost        = float(order_cost),
+                holding_cost_pct  = float(holding_cost_pct),
+            )
+        except Exception as e:
+            result = {"error": str(e)}
+
+    context = {
+        "result":            result,
+        "form_data":         form_data,
+        "drug_list":         ml_engine.DRUG_LIST,
+        "drug_descriptions": ml_engine.DRUG_DESCRIPTIONS,
+        "page":              "inventory",
+    }
+    return render(request, "forecasting/inventory.html", context)

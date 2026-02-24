@@ -1,0 +1,364 @@
+{% extends "forecasting/base.html" %}
+
+{% block title %}Inventory Optimisation — Pharmacy Forecast System{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item active">Inventory Optimisation</li>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .inv-metric-card {
+        border-radius: 10px;
+        padding: 1rem 1.25rem;
+        box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .inv-metric-card .inv-value { font-size: 1.7rem; font-weight: 700; line-height: 1.1; }
+    .inv-metric-card .inv-label { font-size: .72rem; text-transform: uppercase;
+                                  letter-spacing: .05em; opacity: .7; margin-top: .25rem; }
+    .inv-metric-card .inv-formula { font-size: .72rem; color: #6c757d; margin-top: .3rem; font-family: monospace; }
+
+    /* Gauge bar */
+    .gauge-bar { height: 28px; border-radius: 6px; background: #e9ecef;
+                 position: relative; overflow: visible; }
+    .gauge-fill { height: 100%; border-radius: 6px; transition: width .4s; }
+    .gauge-marker { position: absolute; top: -8px; width: 2px; height: 44px;
+                    background: #212529; opacity: .45; }
+    .gauge-marker-label { position: absolute; top: -22px; font-size: .65rem;
+                          color: #495057; white-space: nowrap; transform: translateX(-50%); }
+
+    .status-pill { font-size: 1rem; font-weight: 700; padding: .45rem 1.1rem;
+                   border-radius: 50px; letter-spacing: .03em; }
+    .formula-box { background: #f8f9fa; border-radius: 8px; padding: .9rem 1.1rem;
+                   font-family: monospace; font-size: .8rem; color: #495057; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h4 class="mb-0 fw-bold">Inventory Optimisation</h4>
+        <small class="text-muted">Calculates safety stock, reorder point and Economic Order Quantity (EOQ) from historical demand</small>
+    </div>
+</div>
+
+<div class="row g-4">
+
+    <!-- ── LEFT: Form ───────────────────────────────────────────────────── -->
+    <div class="col-lg-5">
+        <div class="chart-card">
+            <h6 class="fw-semibold mb-3">
+                <i class="bi bi-sliders me-2 text-primary"></i>Inventory Parameters
+            </h6>
+            <form method="post">
+                {% csrf_token %}
+
+                <!-- Drug -->
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Drug (ATC Code)</label>
+                    <select name="drug_name" class="form-select" required>
+                        {% for drug in drug_list %}
+                        <option value="{{ drug }}"
+                            {% if form_data.drug_name == drug %}selected{% endif %}>
+                            {{ drug }} — {{ drug_descriptions|default_if_none:"" }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Current stock -->
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Current Stock (units)</label>
+                    <input type="number" name="current_stock" class="form-control"
+                           min="0" step="1"
+                           value="{{ form_data.current_stock|default:'500' }}" required>
+                    <div class="form-text text-muted">Units currently on the shelf</div>
+                </div>
+
+                <!-- Lead time -->
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Supplier Lead Time (weeks)</label>
+                    <select name="lead_time_weeks" class="form-select">
+                        {% for w in "12345678" %}
+                        <option value="{{ w }}"
+                            {% if form_data.lead_time_weeks == w %}selected{% endif %}>
+                            {{ w }} week{% if w != "1" %}s{% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text text-muted">Time from placing an order to receiving stock</div>
+                </div>
+
+                <!-- Service level -->
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Service Level</label>
+                    <select name="service_level" class="form-select">
+                        <option value="90"  {% if form_data.service_level == "90"  %}selected{% endif %}>90% — Standard</option>
+                        <option value="95"  {% if form_data.service_level == "95"  or not form_data.service_level %}selected{% endif %}>95% — Recommended</option>
+                        <option value="98"  {% if form_data.service_level == "98"  %}selected{% endif %}>98% — High</option>
+                        <option value="99"  {% if form_data.service_level == "99"  %}selected{% endif %}>99% — Critical Drug</option>
+                    </select>
+                    <div class="form-text text-muted">Probability of never running out during lead time</div>
+                </div>
+
+                <hr class="my-3">
+                <p class="text-muted small mb-2"><i class="bi bi-calculator me-1"></i>EOQ parameters (optional — used to calculate optimal order size)</p>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label fw-semibold small">Unit Cost (£)</label>
+                        <input type="number" name="unit_cost" class="form-control form-control-sm"
+                               min="0.01" step="0.01"
+                               value="{{ form_data.unit_cost|default:'10.00' }}" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-semibold small">Order Cost (£/order)</label>
+                        <input type="number" name="order_cost" class="form-control form-control-sm"
+                               min="0" step="0.01"
+                               value="{{ form_data.order_cost|default:'50.00' }}" required>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">Annual Holding Cost (% of unit cost)</label>
+                    <div class="input-group input-group-sm">
+                        <input type="number" name="holding_cost_pct" class="form-control"
+                               min="1" max="100" step="1"
+                               value="{{ form_data.holding_cost_pct|default:'25' }}" required>
+                        <span class="input-group-text">%</span>
+                    </div>
+                    <div class="form-text text-muted">Typically 20–30% (storage, obsolescence, capital cost)</div>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-calculator me-1"></i>Calculate Recommendations
+                </button>
+            </form>
+        </div>
+    </div><!-- /col -->
+
+    <!-- ── RIGHT: Results ───────────────────────────────────────────────── -->
+    <div class="col-lg-7">
+
+        {% if result and result.error %}
+        <div class="alert alert-danger">
+            <i class="bi bi-exclamation-circle me-2"></i>
+            <strong>Error:</strong> {{ result.error }}
+        </div>
+        {% endif %}
+
+        {% if result and not result.error %}
+
+        <!-- Status banner -->
+        <div class="chart-card mb-3 d-flex align-items-center gap-3">
+            <span class="status-pill bg-{{ result.status_colour }}
+                {% if result.status_colour == 'warning' %}text-dark{% else %}text-white{% endif %}">
+                <i class="bi bi-{{ result.status_icon }} me-1"></i>{{ result.status }}
+            </span>
+            <div>
+                <div class="fw-semibold">{{ result.drug }} — {{ result.drug_description }}</div>
+                <small class="text-muted">
+                    {{ result.weeks_of_coverage }} weeks of stock remaining at average weekly demand
+                    ({{ result.avg_weekly_demand }} units/week)
+                </small>
+            </div>
+        </div>
+
+        <!-- Key metric cards -->
+        <div class="row g-2 mb-3">
+            <div class="col-6 col-xl-3">
+                <div class="inv-metric-card h-100" style="background:#e9f7ef;">
+                    <div class="inv-value text-success">{{ result.safety_stock }}</div>
+                    <div class="inv-label text-success">Safety Stock</div>
+                    <div class="inv-formula">Z×σ×√L = {{ result.z_score }}×{{ result.std_weekly_demand }}×√{{ result.lead_time_weeks }}</div>
+                </div>
+            </div>
+            <div class="col-6 col-xl-3">
+                <div class="inv-metric-card h-100" style="background:#fff3cd;">
+                    <div class="inv-value text-warning">{{ result.reorder_point }}</div>
+                    <div class="inv-label text-warning">Reorder Point</div>
+                    <div class="inv-formula">μ×L + SS = {{ result.demand_during_lt }} + {{ result.safety_stock }}</div>
+                </div>
+            </div>
+            <div class="col-6 col-xl-3">
+                <div class="inv-metric-card h-100" style="background:#e8f0fe;">
+                    <div class="inv-value text-primary">{% if result.eoq %}{{ result.eoq|floatformat:0 }}{% else %}—{% endif %}</div>
+                    <div class="inv-label text-primary">EOQ (units)</div>
+                    <div class="inv-formula">√(2DS/H)</div>
+                </div>
+            </div>
+            <div class="col-6 col-xl-3">
+                <div class="inv-metric-card h-100" style="background:#fce8ff;">
+                    <div class="inv-value" style="color:#9c27b0;">{{ result.weeks_of_coverage }}w</div>
+                    <div class="inv-label" style="color:#9c27b0;">Weeks of Cover</div>
+                    <div class="inv-formula">stock ÷ avg weekly</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stock gauge -->
+        <div class="chart-card mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="mb-0 fw-semibold"><i class="bi bi-bar-chart-fill me-2 text-primary"></i>Stock Level vs Thresholds</h6>
+                <small class="text-muted">Current: <strong>{{ result.current_stock|floatformat:0 }} units</strong></small>
+            </div>
+
+            <div class="gauge-bar mb-4">
+                <!-- Safety stock marker -->
+                <div class="gauge-marker" style="left:{{ result.ss_pct }}%;">
+                    <span class="gauge-marker-label" style="left:{{ result.ss_pct }}%;">
+                        SS={{ result.safety_stock }}
+                    </span>
+                </div>
+                <!-- Reorder point marker -->
+                <div class="gauge-marker" style="left:{{ result.rop_pct }}%; background:#fd7e14;">
+                    <span class="gauge-marker-label" style="left:{{ result.rop_pct }}%; color:#fd7e14;">
+                        ROP={{ result.reorder_point }}
+                    </span>
+                </div>
+                <!-- Fill -->
+                <div class="gauge-fill bg-{{ result.status_colour }}" style="width:{{ result.stock_pct }}%;"></div>
+            </div>
+
+            <div class="d-flex gap-3 flex-wrap" style="font-size:.78rem;">
+                <span><span class="badge bg-secondary me-1">&nbsp;</span> Safety Stock ({{ result.safety_stock }} units)</span>
+                <span><span class="me-1" style="color:#fd7e14;">■</span> Reorder Point ({{ result.reorder_point }} units)</span>
+                <span><span class="badge bg-{{ result.status_colour }} me-1">&nbsp;</span> Current Stock ({{ result.current_stock|floatformat:0 }} units)</span>
+            </div>
+        </div>
+
+        <!-- Recommendation -->
+        <div class="chart-card mb-3
+            {% if result.status == 'CRITICAL' %}border border-danger{% elif result.status == 'ORDER NOW' %}border border-warning{% endif %}">
+            <h6 class="fw-semibold mb-3">
+                <i class="bi bi-lightbulb-fill me-2 text-warning"></i>Recommendation
+            </h6>
+
+            {% if result.status == "CRITICAL" %}
+            <div class="alert alert-danger py-2 mb-3">
+                <strong>🚨 Stock below safety buffer!</strong> Immediate re-order required.
+                Risk of stockout during supplier lead time is high.
+            </div>
+            {% elif result.status == "ORDER NOW" %}
+            <div class="alert alert-warning py-2 mb-3">
+                <strong>⚠ Stock at or below Reorder Point.</strong> Place an order now to avoid
+                a stockout during the {{ result.lead_time_weeks }}-week supplier lead time.
+            </div>
+            {% elif result.status == "APPROACHING" %}
+            <div class="alert alert-info py-2 mb-3">
+                <strong>Stock approaching Reorder Point.</strong> Monitor closely and
+                prepare to order within the next 1–2 weeks.
+            </div>
+            {% else %}
+            <div class="alert alert-success py-2 mb-3">
+                <strong>✓ Stock level is adequate.</strong> No immediate action needed.
+                Next order recommended at {{ result.reorder_point }} units.
+            </div>
+            {% endif %}
+
+            <div class="row g-3">
+                <div class="col-sm-6">
+                    <div class="p-3 rounded text-center" style="background:#f0f4ff;">
+                        <div style="font-size:2rem; font-weight:800; color:#0d6efd;">
+                            {{ result.suggested_order }}
+                        </div>
+                        <div class="text-muted" style="font-size:.8rem;">Suggested Order Quantity (units)</div>
+                        {% if result.eoq %}
+                        <div class="text-muted" style="font-size:.72rem;">Based on EOQ = {{ result.eoq|floatformat:0 }} units</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-sm-6">
+                    <div class="p-3 rounded text-center" style="background:#f0faf0;">
+                        <div style="font-size:2rem; font-weight:800; color:#198754;">
+                            £{{ result.order_value }}
+                        </div>
+                        <div class="text-muted" style="font-size:.8rem;">Estimated Order Value</div>
+                        <div class="text-muted" style="font-size:.72rem;">{{ result.suggested_order }} units × £{{ result.unit_cost }}/unit</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Demand stats strip -->
+        <div class="chart-card">
+            <h6 class="fw-semibold mb-3">
+                <i class="bi bi-graph-up me-2 text-muted"></i>Historical Demand Statistics ({{ result.drug }})
+            </h6>
+            <div class="row text-center g-0">
+                <div class="col border-end py-2">
+                    <div class="fw-semibold">{{ result.avg_weekly_demand }}</div>
+                    <div class="text-muted" style="font-size:.7rem;">Avg Weekly Demand</div>
+                </div>
+                <div class="col border-end py-2">
+                    <div class="fw-semibold">{{ result.std_weekly_demand }}</div>
+                    <div class="text-muted" style="font-size:.7rem;">Std Dev (weekly)</div>
+                </div>
+                <div class="col border-end py-2">
+                    <div class="fw-semibold">{{ result.annual_demand|floatformat:0 }}</div>
+                    <div class="text-muted" style="font-size:.7rem;">Annual Demand</div>
+                </div>
+                <div class="col border-end py-2">
+                    <div class="fw-semibold">{{ result.service_level_pct|floatformat:0 }}%</div>
+                    <div class="text-muted" style="font-size:.7rem;">Service Level</div>
+                </div>
+                <div class="col py-2">
+                    <div class="fw-semibold">{{ result.lead_time_weeks }}w</div>
+                    <div class="text-muted" style="font-size:.7rem;">Lead Time</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Formula reference (collapsible) -->
+        <div class="chart-card mt-3">
+            <button class="btn btn-link text-decoration-none p-0 fw-semibold text-secondary d-flex align-items-center gap-2"
+                    type="button" data-bs-toggle="collapse" data-bs-target="#formulaRef">
+                <i class="bi bi-book me-1"></i>Formula Reference
+                <i class="bi bi-chevron-down" style="font-size:.8rem;"></i>
+            </button>
+            <div class="collapse mt-3" id="formulaRef">
+                <div class="formula-box mb-2">
+                    <strong>Safety Stock (SS)</strong><br>
+                    SS = Z × σ_demand × √(lead_time)<br>
+                    <span class="text-muted">Z = {{ result.z_score }} ({{ result.service_level_pct|floatformat:0 }}% service level)  |  σ = {{ result.std_weekly_demand }} units/week  |  L = {{ result.lead_time_weeks }} weeks</span>
+                </div>
+                <div class="formula-box mb-2">
+                    <strong>Reorder Point (ROP)</strong><br>
+                    ROP = μ_demand × lead_time + SS<br>
+                    <span class="text-muted">= {{ result.avg_weekly_demand }} × {{ result.lead_time_weeks }} + {{ result.safety_stock }} = {{ result.reorder_point }} units</span>
+                </div>
+                {% if result.eoq %}
+                <div class="formula-box">
+                    <strong>Economic Order Quantity (EOQ)</strong><br>
+                    EOQ = √(2 × D × S / H)<br>
+                    <span class="text-muted">D = {{ result.annual_demand|floatformat:0 }} units/year  |  S = £{{ result.order_cost }}/order  |  H = £{{ result.unit_cost }} × {{ result.holding_cost_pct }}% = £{% widthratio result.unit_cost 100 result.holding_cost_pct %}/unit/year</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% else %}
+        <!-- No result yet -->
+        <div class="chart-card h-100 d-flex flex-column align-items-center justify-content-center text-center py-5"
+             style="min-height: 340px;">
+            <i class="bi bi-boxes fs-1 text-muted mb-3"></i>
+            <h6 class="fw-semibold text-muted">No Calculation Yet</h6>
+            <p class="text-muted small mb-4 px-3">
+                Select a drug and enter your current stock level and supplier details,<br>
+                then click <strong>Calculate Recommendations</strong>.
+            </p>
+            <div class="p-3 rounded text-start w-100" style="background:#f8f9fa; max-width:380px; font-size:.8rem;">
+                <div class="fw-semibold mb-1 text-secondary"><i class="bi bi-info-circle me-1"></i>What this page calculates:</div>
+                <ul class="mb-0 text-muted ps-3">
+                    <li><strong>Safety Stock</strong> — buffer against demand variability</li>
+                    <li><strong>Reorder Point</strong> — when to place the next order</li>
+                    <li><strong>EOQ</strong> — most cost-effective order quantity</li>
+                    <li><strong>Weeks of Coverage</strong> — how long stock will last</li>
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+
+    </div><!-- /col -->
+</div><!-- /row -->
+{% endblock %}

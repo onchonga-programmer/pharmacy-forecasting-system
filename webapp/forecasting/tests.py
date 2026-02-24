@@ -146,3 +146,162 @@ class DashboardViewTest(TestCase):
     def test_drift_page_returns_200(self):
         response = self.client.get(reverse("forecasting:drift"))
         self.assertEqual(response.status_code, 200)
+
+    def test_inventory_get_returns_200(self):
+        response = self.client.get(reverse("forecasting:inventory"))
+        self.assertEqual(response.status_code, 200)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. Inventory Optimisation
+# ─────────────────────────────────────────────────────────────────────────────
+
+class InventoryOptimisationTest(TestCase):
+    """ml_engine.compute_inventory_recommendation() should return valid metrics."""
+
+    DRUG    = "M01AB"
+    PARAMS  = dict(
+        current_stock     = 500.0,
+        lead_time_weeks   = 2,
+        service_level_pct = 95.0,
+        unit_cost         = 10.0,
+        order_cost        = 50.0,
+        holding_cost_pct  = 25.0,
+    )
+
+    def setUp(self):
+        self.result = ml_engine.compute_inventory_recommendation(
+            drug_name=self.DRUG, **self.PARAMS
+        )
+
+    def test_no_error_returned(self):
+        self.assertIsNone(
+            self.result.get("error"),
+            f"compute_inventory_recommendation returned error: {self.result.get('error')}",
+        )
+
+    def test_required_keys_present(self):
+        required = {
+            "safety_stock", "reorder_point", "eoq", "weeks_of_coverage",
+            "status", "suggested_order", "avg_weekly_demand", "std_weekly_demand",
+            "annual_demand", "order_value", "stock_pct", "rop_pct", "ss_pct",
+        }
+        missing = required - set(self.result.keys())
+        self.assertSetEqual(missing, set(), f"Result missing keys: {missing}")
+
+    def test_safety_stock_is_non_negative(self):
+        self.assertGreaterEqual(self.result["safety_stock"], 0)
+
+    def test_reorder_point_greater_than_safety_stock(self):
+        self.assertGreater(
+            self.result["reorder_point"],
+            self.result["safety_stock"],
+            "Reorder point must exceed safety stock",
+        )
+
+    def test_eoq_is_positive(self):
+        self.assertIsNotNone(self.result["eoq"])
+        self.assertGreater(self.result["eoq"], 0)
+
+    def test_weeks_of_coverage_positive(self):
+        self.assertGreater(self.result["weeks_of_coverage"], 0)
+
+    def test_suggested_order_positive(self):
+        self.assertGreater(self.result["suggested_order"], 0)
+
+    def test_status_is_valid_value(self):
+        valid_statuses = {"CRITICAL", "ORDER NOW", "APPROACHING", "ADEQUATE"}
+        self.assertIn(self.result["status"], valid_statuses)
+
+    def test_critical_status_when_stock_zero(self):
+        r = ml_engine.compute_inventory_recommendation(
+            drug_name="M01AB", current_stock=0.0, lead_time_weeks=2,
+            service_level_pct=95.0, unit_cost=10.0, order_cost=50.0,
+            holding_cost_pct=25.0,
+        )
+        self.assertEqual(r["status"], "CRITICAL")
+
+    def test_adequate_status_when_stock_very_high(self):
+        r = ml_engine.compute_inventory_recommendation(
+            drug_name="M01AB", current_stock=99999.0, lead_time_weeks=2,
+            service_level_pct=95.0, unit_cost=10.0, order_cost=50.0,
+            holding_cost_pct=25.0,
+        )
+        self.assertEqual(r["status"], "ADEQUATE")
+
+    def test_higher_service_level_gives_larger_safety_stock(self):
+        r95 = ml_engine.compute_inventory_recommendation(
+            drug_name="M01AB", current_stock=500.0, lead_time_weeks=2,
+            service_level_pct=95.0, unit_cost=10.0, order_cost=50.0,
+            holding_cost_pct=25.0,
+        )
+        r99 = ml_engine.compute_inventory_recommendation(
+            drug_name="M01AB", current_stock=500.0, lead_time_weeks=2,
+            service_level_pct=99.0, unit_cost=10.0, order_cost=50.0,
+            holding_cost_pct=25.0,
+        )
+        self.assertGreater(
+            r99["safety_stock"], r95["safety_stock"],
+            "99% service level should require more safety stock than 95%",
+        )
+
+    def test_longer_lead_time_gives_larger_reorder_point(self):
+        r2 = ml_engine.compute_inventory_recommendation(
+            drug_name="M01AB", current_stock=500.0, lead_time_weeks=2,
+            service_level_pct=95.0, unit_cost=10.0, order_cost=50.0,
+            holding_cost_pct=25.0,
+        )
+        r4 = ml_engine.compute_inventory_recommendation(
+            drug_name="M01AB", current_stock=500.0, lead_time_weeks=4,
+            service_level_pct=95.0, unit_cost=10.0, order_cost=50.0,
+            holding_cost_pct=25.0,
+        )
+        self.assertGreater(
+            r4["reorder_point"], r2["reorder_point"],
+            "Longer lead time should produce a higher reorder point",
+        )
+
+    def test_all_drugs_compute_without_error(self):
+        for drug in ml_engine.DRUG_LIST:
+            r = ml_engine.compute_inventory_recommendation(
+                drug_name=drug, current_stock=500.0, lead_time_weeks=2,
+                service_level_pct=95.0, unit_cost=10.0, order_cost=50.0,
+                holding_cost_pct=25.0,
+            )
+            self.assertIsNone(
+                r.get("error"),
+                f"compute_inventory_recommendation failed for {drug}: {r.get('error')}",
+            )
+
+    def test_inventory_post_returns_200(self):
+        client = self.client
+        response = client.post(
+            reverse("forecasting:inventory"),
+            data={
+                "drug_name":        "M01AB",
+                "current_stock":    "500",
+                "lead_time_weeks":  "2",
+                "service_level":    "95",
+                "unit_cost":        "10.00",
+                "order_cost":       "50.00",
+                "holding_cost_pct": "25",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_inventory_result_in_response_context(self):
+        response = self.client.post(
+            reverse("forecasting:inventory"),
+            data={
+                "drug_name":        "M01AB",
+                "current_stock":    "500",
+                "lead_time_weeks":  "2",
+                "service_level":    "95",
+                "unit_cost":        "10.00",
+                "order_cost":       "50.00",
+                "holding_cost_pct": "25",
+            },
+        )
+        self.assertIn("result", response.context)
+        self.assertIsNone(response.context["result"].get("error"))
+

@@ -1,7 +1,8 @@
 """
 ML Engine — Pharmacy Forecasting System
 Handles model loading, feature engineering for live forecasts,
-and loading of pre-computed results for dashboard display.
+loading of pre-computed results for dashboard display, and
+inventory optimisation calculations.
 """
 
 import json
@@ -324,3 +325,133 @@ def process_csv_forecast(file_obj) -> list:
                 for _, r in df.iterrows()]
     except Exception as e:
         return [{"error": f"Failed to process CSV: {e}"}]
+
+
+# ── Inventory Optimisation ────────────────────────────────────────────────────
+
+def compute_inventory_recommendation(
+    drug_name: str,
+    current_stock: float,
+    lead_time_weeks: int,
+    service_level_pct: float,
+    unit_cost: float,
+    order_cost: float,
+    holding_cost_pct: float,
+) -> dict:
+    """
+    Compute inventory optimisation metrics for a given drug using demand
+    statistics derived from historical sales data.
+
+    Parameters
+    ----------
+    drug_name         : ATC code, e.g. "M01AB"
+    current_stock     : units currently on hand
+    lead_time_weeks   : weeks from placing order to delivery
+    service_level_pct : desired service level (90 / 95 / 98 / 99)
+    unit_cost         : purchase cost per unit (£)
+    order_cost        : fixed cost per order (£)  — used in EOQ formula
+    holding_cost_pct  : annual holding cost as % of unit cost (e.g. 25 = 25 %)
+
+    Returns
+    -------
+    dict with all computed inventory metrics, or {"error": msg} on failure.
+    """
+    df = load_historical_data()
+    drug_df = (
+        df[df["drug_name"] == drug_name]
+        .sort_values("week_start_date")
+        .reset_index(drop=True)
+    )
+
+    if len(drug_df) == 0:
+        return {"error": f"No historical data found for {drug_name}"}
+
+    qty = drug_df["total_quantity"].values.astype(float)
+
+    # ── Demand statistics ──────────────────────────────────────────────────
+    avg_weekly    = float(np.mean(qty))
+    std_weekly    = float(np.std(qty, ddof=1))
+    annual_demand = avg_weekly * 52.0
+
+    # ── Z-score for desired service level ─────────────────────────────────
+    z_map = {90.0: 1.282, 95.0: 1.645, 98.0: 2.054, 99.0: 2.326}
+    z = z_map.get(float(service_level_pct), 1.645)
+
+    # ── Safety stock:  SS = Z × σ_demand × √(lead_time) ───────────────────
+    safety_stock = max(0.0, round(z * std_weekly * math.sqrt(lead_time_weeks), 1))
+
+    # ── Reorder point: ROP = μ × L + SS ───────────────────────────────────
+    demand_during_lt = round(avg_weekly * lead_time_weeks, 1)
+    reorder_point    = round(demand_during_lt + safety_stock, 1)
+
+    # ── Economic Order Quantity: EOQ = √(2DS / H) ─────────────────────────
+    H = unit_cost * (holding_cost_pct / 100.0)
+    if H > 0 and annual_demand > 0 and order_cost > 0:
+        eoq = round(math.sqrt((2.0 * annual_demand * order_cost) / H), 0)
+    else:
+        eoq = None
+
+    # ── Weeks of stock coverage ────────────────────────────────────────────
+    weeks_of_coverage = round(current_stock / avg_weekly, 1) if avg_weekly > 0 else 0.0
+
+    # ── Stock status ───────────────────────────────────────────────────────
+    if current_stock <= safety_stock:
+        status        = "CRITICAL"
+        status_colour = "danger"
+        status_icon   = "exclamation-octagon-fill"
+    elif current_stock <= reorder_point:
+        status        = "ORDER NOW"
+        status_colour = "warning"
+        status_icon   = "cart-fill"
+    elif current_stock <= reorder_point * 1.30:
+        status        = "APPROACHING"
+        status_colour = "info"
+        status_icon   = "arrow-down-circle-fill"
+    else:
+        status        = "ADEQUATE"
+        status_colour = "success"
+        status_icon   = "check-circle-fill"
+
+    # ── Suggested order quantity ───────────────────────────────────────────
+    base_order = eoq if eoq else round(demand_during_lt + safety_stock)
+    if status in ("CRITICAL", "ORDER NOW"):
+        # Enough to restore stock to ROP + one EOQ cycle above it
+        shortfall      = max(0.0, reorder_point - current_stock)
+        suggested_order = int(math.ceil(shortfall + base_order))
+    else:
+        suggested_order = int(base_order)
+
+    # ── Visual gauge markers (as % of display range) ──────────────────────
+    max_display = max(reorder_point * 3.0, float(current_stock), 1.0)
+    stock_pct   = min(100, round(current_stock    / max_display * 100))
+    rop_pct     = min(100, round(reorder_point    / max_display * 100))
+    ss_pct      = min(100, round(safety_stock     / max_display * 100))
+
+    return {
+        "drug":               drug_name,
+        "drug_description":   DRUG_DESCRIPTIONS.get(drug_name, drug_name),
+        "avg_weekly_demand":  round(avg_weekly, 1),
+        "std_weekly_demand":  round(std_weekly, 1),
+        "annual_demand":      round(annual_demand, 1),
+        "lead_time_weeks":    lead_time_weeks,
+        "service_level_pct":  service_level_pct,
+        "z_score":            z,
+        "safety_stock":       safety_stock,
+        "demand_during_lt":   demand_during_lt,
+        "reorder_point":      reorder_point,
+        "eoq":                eoq,
+        "current_stock":      current_stock,
+        "weeks_of_coverage":  weeks_of_coverage,
+        "status":             status,
+        "status_colour":      status_colour,
+        "status_icon":        status_icon,
+        "suggested_order":    suggested_order,
+        "stock_pct":          stock_pct,
+        "rop_pct":            rop_pct,
+        "ss_pct":             ss_pct,
+        "unit_cost":          unit_cost,
+        "order_cost":         order_cost,
+        "holding_cost_pct":   holding_cost_pct,
+        "order_value":        round(suggested_order * unit_cost, 2),
+        "error":              None,
+    }
