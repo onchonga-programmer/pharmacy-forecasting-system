@@ -1,14 +1,14 @@
 DATA CLEANING STATISTICS
 ============================================================
 
-initial_records: 2380
-outliers_detected: 321
-outliers_percentage: 13.487394957983193
-outliers_capped: 321
-incomplete_years: [2019]
-records_in_incomplete_years: 327
+initial_records: 4972
+outliers_detected: 647
+outliers_percentage: 13.012872083668544
+outliers_capped: 647
+incomplete_years: []
+records_in_incomplete_years: 0
 log_transform_applied: True
-skewness_before: 2.6645068310373548
-skewness_after: -0.056407093330766364
-final_records: 2380
+skewness_before: 2.697975085397173
+skewness_after: -0.30764079086488993
+final_records: 4972
 output_path: /home/brenda/final year project/PharmacyForecastingSystem/data/processed/sales_cleaned.csv
