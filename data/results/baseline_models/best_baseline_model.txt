@@ -1,5 +1,5 @@
 Best Baseline Model: Holt-Winters
-Average MAE: 7.94
-Average RMSE: 10.38
-Average MAPE: 30.30%
-Average R²: -0.4835
+Average MAE: 7.75
+Average RMSE: 10.55
+Average MAPE: inf%
+Average R²: 0.0958
