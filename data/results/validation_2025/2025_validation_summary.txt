@@ -1,6 +1,7 @@
-=================================================================
+======================================================================
 2025 OUT-OF-SAMPLE VALIDATION SUMMARY
-=================================================================
+XGBoost vs Holt-Winters vs SARIMA
+======================================================================
 
 Test period     : January – December 2025
 Drugs evaluated : 8
@@ -8,28 +9,35 @@ Total records   : 408
 
 OVERALL METRICS
 ----------------------------------------
-XGBoost (2025 test)
+XGBoost      (2025 test)
   MAE     : 14.29
   RMSE    : 24.85
   MAPE    : 28.54
   WMAPE   : 25.11
   R2      : 0.8774
 
-SARIMA  (2025 test)
+SARIMA       (2025 test)
   MAE     : 68.43
   RMSE    : 136.38
   MAPE    : 133.43
   WMAPE   : 120.2
   R2      : -2.693
 
+Holt-Winters (2025 test)
+  MAE     : 13.11
+  RMSE    : 23.23
+  MAPE    : 29.23
+  WMAPE   : 23.02
+  R2      : 0.8928
 
-PER-DRUG XGB vs SARIMA MAE
+
+PER-DRUG BEST MODEL (by MAE)
 ----------------------------------------
-  N05C: XGB=2.41  SAR=4.28  ✅ XGBoost
-  M01AE: XGB=4.84  SAR=35.19  ✅ XGBoost
-  N02BA: XGB=5.19  SAR=5.92  ✅ XGBoost
-  M01AB: XGB=7.91  SAR=49.10  ✅ XGBoost
-  R06: XGB=8.95  SAR=33.97  ✅ XGBoost
-  N05B: XGB=15.17  SAR=123.07  ✅ XGBoost
-  R03: XGB=20.98  SAR=83.10  ✅ XGBoost
-  N02BE: XGB=48.89  SAR=212.78  ✅ XGBoost
+  N05C: XGB=2.41  HW=1.95  SAR=4.28  ✅ Holt-Win
+  M01AE: XGB=4.84  HW=4.62  SAR=35.19  ✅ Holt-Win
+  N02BA: XGB=5.19  HW=4.84  SAR=5.92  ✅ Holt-Win
+  M01AB: XGB=7.91  HW=7.79  SAR=49.10  ✅ Holt-Win
+  R06: XGB=8.95  HW=7.74  SAR=33.97  ✅ Holt-Win
+  N05B: XGB=15.17  HW=13.77  SAR=123.07  ✅ Holt-Win
+  R03: XGB=20.98  HW=18.49  SAR=83.10  ✅ Holt-Win
+  N02BE: XGB=48.89  HW=45.64  SAR=212.78  ✅ Holt-Win
