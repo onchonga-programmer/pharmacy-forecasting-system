@@ -1,0 +1,35 @@
+=================================================================
+2024 OUT-OF-SAMPLE VALIDATION SUMMARY
+=================================================================
+
+Test period     : January – December 2024
+Drugs evaluated : 8
+Total records   : 424
+
+OVERALL METRICS
+----------------------------------------
+XGBoost (2024 test)
+  MAE     : 15.56
+  RMSE    : 29.92
+  MAPE    : 29.45
+  WMAPE   : 27.34
+  R2      : 0.831
+
+SARIMA  (2024 test)
+  MAE     : 75.68
+  RMSE    : 183.3
+  MAPE    : 160.25
+  WMAPE   : 133.0
+  R2      : -5.3409
+
+
+PER-DRUG XGB vs SARIMA MAE
+----------------------------------------
+  N05C: XGB=3.17  SAR=3.05  ⚠ SARIMA
+  N02BA: XGB=4.67  SAR=7.00  ✅ XGBoost
+  M01AE: XGB=4.76  SAR=64.16  ✅ XGBoost
+  M01AB: XGB=6.76  SAR=39.46  ✅ XGBoost
+  R06: XGB=8.59  SAR=29.68  ✅ XGBoost
+  N05B: XGB=12.44  SAR=172.91  ✅ XGBoost
+  R03: XGB=20.78  SAR=78.72  ✅ XGBoost
+  N02BE: XGB=63.28  SAR=210.47  ✅ XGBoost

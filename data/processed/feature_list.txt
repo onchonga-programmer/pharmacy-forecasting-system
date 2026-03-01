@@ -1,3 +1,8 @@
+year
+week_number
+is_complete_year
+total_quantity_log
+total_quantity_scaled
 month
 quarter
 day_of_year

@@ -1,0 +1,35 @@
+=================================================================
+2025 OUT-OF-SAMPLE VALIDATION SUMMARY
+=================================================================
+
+Test period     : January – December 2025
+Drugs evaluated : 8
+Total records   : 408
+
+OVERALL METRICS
+----------------------------------------
+XGBoost (2025 test)
+  MAE     : 14.29
+  RMSE    : 24.85
+  MAPE    : 28.54
+  WMAPE   : 25.11
+  R2      : 0.8774
+
+SARIMA  (2025 test)
+  MAE     : 68.43
+  RMSE    : 136.38
+  MAPE    : 133.43
+  WMAPE   : 120.2
+  R2      : -2.693
+
+
+PER-DRUG XGB vs SARIMA MAE
+----------------------------------------
+  N05C: XGB=2.41  SAR=4.28  ✅ XGBoost
+  M01AE: XGB=4.84  SAR=35.19  ✅ XGBoost
+  N02BA: XGB=5.19  SAR=5.92  ✅ XGBoost
+  M01AB: XGB=7.91  SAR=49.10  ✅ XGBoost
+  R06: XGB=8.95  SAR=33.97  ✅ XGBoost
+  N05B: XGB=15.17  SAR=123.07  ✅ XGBoost
+  R03: XGB=20.98  SAR=83.10  ✅ XGBoost
+  N02BE: XGB=48.89  SAR=212.78  ✅ XGBoost
