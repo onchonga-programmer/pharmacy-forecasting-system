@@ -26,43 +26,56 @@ def _fig_json(fig) -> str:
 
 def dashboard(request):
     try:
-        m18    = ml_engine.load_2018_metrics()
-        cmp_df = ml_engine.load_2019_comparison()
+        m25    = ml_engine.load_2025_metrics()
+        cmp_df = ml_engine.build_2025_comparison()
 
-        # Overall 2019 metrics
-        preds_2019  = ml_engine.load_2019_predictions()
-        mae_2019    = round(float((preds_2019["actual"] - preds_2019["xgb_pred"]).abs().mean()), 2)
-        mape_2019   = round(
-            float(((preds_2019["actual"] - preds_2019["xgb_pred"]).abs() /
-                   preds_2019["actual"].replace(0, float("nan"))).mean() * 100), 2)
+        xgb = m25["xgb"]
+        hw  = m25["hw"]
+        sar = m25["sar"]
 
-        pct_change  = round(((mae_2019 - m18["mae"]) / m18["mae"]) * 100, 1)
+        # Overall 2025 metrics (XGBoost = primary model, HW = best competitor)
+        mae_xgb   = xgb["mae"]
+        mape_xgb  = xgb["mape"]
+        r2_xgb    = xgb["r2"]
+        mae_hw    = hw["mae"]
+        mape_hw   = hw["mape"]
+
+        # % difference: HW vs XGBoost (negative = HW is more accurate on raw MAE)
+        pct_change  = round(((mae_hw - mae_xgb) / mae_xgb) * 100, 1)
 
         drugs_drifted = int(cmp_df["Status"].str.contains("Degraded", na=False).sum())
         drugs_stable  = len(cmp_df) - drugs_drifted
 
-        # ── MAE comparison bar chart ──
+        # ── MAE comparison bar chart — XGBoost vs HW vs SARIMA ──
         fig = go.Figure(data=[
             go.Bar(
-                name="2018 Validation",
+                name="XGBoost (2025 test)",
                 x=cmp_df["Drug"].tolist(),
-                y=cmp_df["MAE_2018"].tolist(),
-                marker_color="#198754",
+                y=cmp_df["MAE_2018"].tolist(),      # MAE_2018 = XGB_MAE
+                marker_color="#0d6efd",
                 text=[f"{v:.2f}" for v in cmp_df["MAE_2018"]],
                 textposition="outside",
             ),
             go.Bar(
-                name="2019 Test",
+                name="Holt-Winters (2025 test)",
                 x=cmp_df["Drug"].tolist(),
-                y=cmp_df["MAE_2019"].tolist(),
-                marker_color="#dc3545",
+                y=cmp_df["MAE_2019"].tolist(),      # MAE_2019 = HW_MAE
+                marker_color="#198754",
                 text=[f"{v:.2f}" for v in cmp_df["MAE_2019"]],
+                textposition="outside",
+            ),
+            go.Bar(
+                name="SARIMA (2025 test)",
+                x=cmp_df["Drug"].tolist(),
+                y=cmp_df["SAR_MAE"].tolist(),
+                marker_color="#dc3545",
+                text=[f"{v:.2f}" for v in cmp_df["SAR_MAE"]],
                 textposition="outside",
             ),
         ])
         fig.update_layout(
             barmode="group",
-            title=dict(text="MAE per Drug — 2018 Validation vs 2019 Test", font=dict(size=14)),
+            title=dict(text="MAE per Drug — XGBoost vs Holt-Winters vs SARIMA (2025 Test)", font=dict(size=14)),
             xaxis_title="Drug (ATC Code)",
             yaxis_title="Mean Absolute Error (units)",
             template="plotly_white",
@@ -72,11 +85,13 @@ def dashboard(request):
         )
 
         context = {
-            "mae_2018":      m18["mae"],
-            "mape_2018":     m18["mape"],
-            "r2_2018":       m18["r2"],
-            "mae_2019":      mae_2019,
-            "mape_2019":     mape_2019,
+            "mae_2018":      mae_xgb,
+            "mape_2018":     mape_xgb,
+            "r2_2018":       r2_xgb,
+            "mae_2019":      mae_hw,
+            "mape_2019":     mape_hw,
+            "r2_2019":       hw["r2"],
+            "mae_sar":       sar["mae"],
             "pct_change":    pct_change,
             "drugs_drifted": drugs_drifted,
             "drugs_stable":  drugs_stable,
@@ -95,58 +110,117 @@ def dashboard(request):
 
 def results(request):
     selected_drug = request.GET.get("drug", "M01AB")
-    selected_year = request.GET.get("year", "2018")
+    selected_year = request.GET.get("year", "2025")
 
     try:
-        if selected_year == "2018":
+        if selected_year == "2025":
+            preds      = ml_engine.load_2025_predictions()
+            drug_preds = preds[preds["drug_name"] == selected_drug].sort_values("week_start_date")
+
+            dates    = drug_preds["week_start_date"].dt.strftime("%Y-%m-%d").tolist()
+            actual   = drug_preds["total_quantity"].tolist()
+            xgb_pred = drug_preds["xgb_pred"].tolist()
+            hw_pred  = drug_preds["hw_pred"].tolist()
+            sar_pred = drug_preds["sarima_pred"].tolist()
+
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=dates, y=actual,
+                mode="lines+markers", name="Actual Sales",
+                line=dict(color="#212529", width=2), marker=dict(size=5),
+            ))
+            fig.add_trace(go.Scatter(
+                x=dates, y=xgb_pred,
+                mode="lines+markers", name="XGBoost",
+                line=dict(color="#0d6efd", width=2, dash="dash"), marker=dict(size=4),
+            ))
+            fig.add_trace(go.Scatter(
+                x=dates, y=hw_pred,
+                mode="lines+markers", name="Holt-Winters",
+                line=dict(color="#198754", width=2, dash="dot"), marker=dict(size=4),
+            ))
+            fig.add_trace(go.Scatter(
+                x=dates, y=sar_pred,
+                mode="lines+markers", name="SARIMA",
+                line=dict(color="#dc3545", width=1.5, dash="dashdot"), marker=dict(size=4),
+            ))
+            fig.update_layout(
+                title=dict(
+                    text=f"{selected_drug} — Actual vs All Models (2025 Out-of-Sample Test)",
+                    font=dict(size=15),
+                ),
+                xaxis_title="Week",
+                yaxis_title="Sales Quantity (units)",
+                template="plotly_white",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                height=420,
+                margin=dict(l=40, r=40, t=60, b=40),
+                hovermode="x unified",
+            )
+
+            per_drug = ml_engine.load_2025_per_drug()
+            row = per_drug[per_drug["Drug"] == selected_drug]
+            if len(row) > 0:
+                r = row.iloc[0]
+                metrics = {
+                    "MAE":    round(float(r["XGB_MAE"]), 2),
+                    "MAPE":   round(float(r["XGB_WMAPE"]), 2),
+                    "R2":     round(float(r["XGB_R2"]), 4),
+                    "HW_MAE": round(float(r["HW_MAE"]), 2),
+                    "HW_R2":  round(float(r["HW_R2"]), 4),
+                    "SAR_MAE": round(float(r["SAR_MAE"]), 2),
+                    "Winner": str(r.get("Winner", "")),
+                }
+            else:
+                metrics = {}
+
+        elif selected_year == "2018":
             preds      = ml_engine.load_2018_predictions()
             drug_preds = preds[preds["drug_name"] == selected_drug].sort_values("week_start_date")
-        else:
-            preds      = ml_engine.load_2019_predictions()
-            drug_preds = preds[preds["drug_name"] == selected_drug].sort_values("week_start_date")
+            dates     = drug_preds["week_start_date"].dt.strftime("%Y-%m-%d").tolist()
+            actual    = drug_preds["actual"].tolist()
+            predicted = drug_preds["xgb_pred"].tolist()
 
-        dates     = drug_preds["week_start_date"].dt.strftime("%Y-%m-%d").tolist()
-        actual    = drug_preds["actual"].tolist()
-        predicted = drug_preds["xgb_pred"].tolist()
-
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=dates, y=actual,
-            mode="lines+markers",
-            name="Actual Sales",
-            line=dict(color="#0d6efd", width=2),
-            marker=dict(size=5),
-        ))
-        fig.add_trace(go.Scatter(
-            x=dates, y=predicted,
-            mode="lines+markers",
-            name="XGBoost Predicted",
-            line=dict(color="#fd7e14", width=2, dash="dash"),
-            marker=dict(size=5),
-        ))
-        fig.update_layout(
-            title=dict(
-                text=f"{selected_drug} — Actual vs Predicted ({selected_year})",
-                font=dict(size=15),
-            ),
-            xaxis_title="Week",
-            yaxis_title="Sales Quantity (units)",
-            template="plotly_white",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            height=420,
-            margin=dict(l=40, r=40, t=60, b=40),
-            hovermode="x unified",
-        )
-
-        # Per-drug metrics
-        if selected_year == "2018":
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=dates, y=actual, mode="lines+markers",
+                name="Actual Sales", line=dict(color="#0d6efd", width=2), marker=dict(size=5)))
+            fig.add_trace(go.Scatter(x=dates, y=predicted, mode="lines+markers",
+                name="XGBoost Predicted", line=dict(color="#fd7e14", width=2, dash="dash"),
+                marker=dict(size=5)))
+            fig.update_layout(
+                title=dict(text=f"{selected_drug} — Actual vs Predicted (2018)", font=dict(size=15)),
+                xaxis_title="Week", yaxis_title="Sales Quantity (units)",
+                template="plotly_white",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                height=420, margin=dict(l=40, r=40, t=60, b=40), hovermode="x unified",
+            )
             metrics_df = ml_engine.load_2018_per_drug()
             row = metrics_df[metrics_df["Drug"] == selected_drug]
-        else:
+            metrics = row.iloc[0].to_dict() if len(row) > 0 else {}
+
+        else:  # 2019
+            preds      = ml_engine.load_2019_predictions()
+            drug_preds = preds[preds["drug_name"] == selected_drug].sort_values("week_start_date")
+            dates     = drug_preds["week_start_date"].dt.strftime("%Y-%m-%d").tolist()
+            actual    = drug_preds["actual"].tolist()
+            predicted = drug_preds["xgb_pred"].tolist()
+
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=dates, y=actual, mode="lines+markers",
+                name="Actual Sales", line=dict(color="#0d6efd", width=2), marker=dict(size=5)))
+            fig.add_trace(go.Scatter(x=dates, y=predicted, mode="lines+markers",
+                name="XGBoost Predicted", line=dict(color="#fd7e14", width=2, dash="dash"),
+                marker=dict(size=5)))
+            fig.update_layout(
+                title=dict(text=f"{selected_drug} — Actual vs Predicted (2019)", font=dict(size=15)),
+                xaxis_title="Week", yaxis_title="Sales Quantity (units)",
+                template="plotly_white",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                height=420, margin=dict(l=40, r=40, t=60, b=40), hovermode="x unified",
+            )
             cmp_df = ml_engine.load_2019_comparison()
             row = cmp_df[cmp_df["Drug"] == selected_drug]
-
-        metrics = row.iloc[0].to_dict() if len(row) > 0 else {}
+            metrics = row.iloc[0].to_dict() if len(row) > 0 else {}
 
         context = {
             "selected_drug": selected_drug,
@@ -210,50 +284,64 @@ def forecast(request):
 
 def drift(request):
     try:
-        cmp_df  = ml_engine.load_2019_comparison()
-        metrics = ml_engine.load_2018_metrics()
+        cmp_df  = ml_engine.build_2025_comparison()
+        m25     = ml_engine.load_2025_metrics()
+        xgb     = m25["xgb"]
+        hw      = m25["hw"]
 
-        mae_threshold  = round(metrics["mae"] * 1.20, 2)
-        mape_threshold = round(metrics["mape"] * 1.20, 2)
+        # Threshold: XGBoost MAE + 20 % buffer
+        mae_threshold  = round(xgb["mae"] * 1.20, 2)
+        mape_threshold = round(xgb["wmape"] * 1.20, 2)
 
         drugs_drifted = int(cmp_df["Status"].str.contains("Degraded", na=False).sum())
         drugs_stable  = len(cmp_df) - drugs_drifted
 
-        cmp_sorted = cmp_df.sort_values("MAE_2019", ascending=True)
+        cmp_sorted = cmp_df.sort_values("MAE_2019", ascending=True)  # sort by HW MAE
         fig = go.Figure()
         fig.add_trace(go.Bar(
-            name="2018 Validation MAE",
+            name="XGBoost 2025 MAE",
             y=cmp_sorted["Drug"].tolist(),
-            x=cmp_sorted["MAE_2018"].tolist(),
+            x=cmp_sorted["MAE_2018"].tolist(),      # MAE_2018 = XGB_MAE
             orientation="h",
-            marker_color="#198754",
+            marker_color="#0d6efd",
             text=[f"{v:.2f}" for v in cmp_sorted["MAE_2018"]],
             textposition="outside",
         ))
         fig.add_trace(go.Bar(
-            name="2019 Test MAE",
+            name="Holt-Winters 2025 MAE",
             y=cmp_sorted["Drug"].tolist(),
-            x=cmp_sorted["MAE_2019"].tolist(),
+            x=cmp_sorted["MAE_2019"].tolist(),      # MAE_2019 = HW_MAE
+            orientation="h",
+            marker_color="#198754",
+            text=[f"{v:.2f}" for v in cmp_sorted["MAE_2019"]],
+            textposition="outside",
+        ))
+        fig.add_trace(go.Bar(
+            name="SARIMA 2025 MAE",
+            y=cmp_sorted["Drug"].tolist(),
+            x=cmp_sorted["SAR_MAE"].tolist(),
             orientation="h",
             marker_color="#dc3545",
-            text=[f"{v:.2f}" for v in cmp_sorted["MAE_2019"]],
+            text=[f"{v:.2f}" for v in cmp_sorted["SAR_MAE"]],
             textposition="outside",
         ))
         fig.update_layout(
             barmode="group",
-            title=dict(text="Model Drift: MAE Degradation per Drug (2018 → 2019)", font=dict(size=14)),
+            title=dict(text="2025 Out-of-Sample MAE: XGBoost vs Holt-Winters vs SARIMA (per Drug)", font=dict(size=14)),
             xaxis_title="Mean Absolute Error (units)",
             template="plotly_white",
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            height=420,
-            margin=dict(l=60, r=60, t=60, b=40),
+            height=460,
+            margin=dict(l=70, r=80, t=60, b=40),
         )
 
         context = {
             "comparison":     cmp_df.to_dict("records"),
-            "mae_2018":       metrics["mae"],
-            "mape_2018":      metrics["mape"],
-            "r2_2018":        metrics["r2"],
+            "mae_2018":       xgb["mae"],       # XGBoost overall MAE
+            "mape_2018":      xgb["wmape"],     # XGBoost overall WMAPE
+            "r2_2018":        xgb["r2"],
+            "mae_2019":       hw["mae"],        # HW overall MAE
+            "r2_2019":        hw["r2"],
             "mae_threshold":  mae_threshold,
             "mape_threshold": mape_threshold,
             "drugs_drifted":  drugs_drifted,

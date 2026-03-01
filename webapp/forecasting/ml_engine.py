@@ -13,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
 warnings.filterwarnings("ignore")
 
@@ -48,9 +49,120 @@ VOLUME_SEGMENTS = {
 # ── Caches ────────────────────────────────────────────────────────────────────
 _model_cache = None
 _historical_data_cache = None
+_hw_cache: dict = {}          # drug_name → fitted ExponentialSmoothing result
+
+# ── Drugs that default to Holt-Winters (low-volume, stable seasonal demand) ──
+HW_PREFERRED_DRUGS = {"N05C"}   # extend if more drugs favour HW in future
 
 
 # ── Loaders ───────────────────────────────────────────────────────────────────
+
+# ── Holt-Winters helpers ──────────────────────────────────────────────────────
+
+def _fit_holt_winters(drug_name: str):
+    """
+    Fit an additive Holt-Winters (ETS A,A,A) model on ALL historical data for
+    drug_name.  The fitted result is memoised in _hw_cache so subsequent calls
+    for the same drug are cheap.
+
+    Returns the fitted HoltWintersResults object, or raises on failure.
+    """
+    global _hw_cache
+    if drug_name in _hw_cache:
+        return _hw_cache[drug_name]
+
+    df = load_historical_data()
+    drug_df = (
+        df[df["drug_name"] == drug_name]
+        .sort_values("week_start_date")
+        .reset_index(drop=True)
+    )
+    if len(drug_df) < 104:   # need at least 2 full years
+        raise ValueError(
+            f"Not enough history for Holt-Winters on {drug_name} "
+            f"(need ≥ 104 weeks, found {len(drug_df)})."
+        )
+
+    series = drug_df["total_quantity"].astype(float)
+    model = ExponentialSmoothing(
+        series,
+        trend="add",
+        seasonal="add",
+        seasonal_periods=52,
+        initialization_method="estimated",
+    )
+    fitted = model.fit(optimized=True, remove_bias=True)
+    _hw_cache[drug_name] = fitted
+    return fitted
+
+
+def generate_hw_forecast(drug_name: str, forecast_date) -> dict:
+    """
+    Generate a Holt-Winters forecast for drug_name on forecast_date.
+    Returns a dict with the same shape as generate_forecast() so callers
+    can treat both interchangeably.
+    """
+    forecast_date = pd.Timestamp(forecast_date)
+    df = load_historical_data()
+    drug_df = (
+        df[df["drug_name"] == drug_name]
+        .sort_values("week_start_date")
+        .reset_index(drop=True)
+    )
+
+    # Only use data strictly before the forecast date
+    history = drug_df[drug_df["week_start_date"] < forecast_date]
+    if len(history) < 104:
+        return {"error": (
+            f"Not enough history for Holt-Winters on {drug_name} before "
+            f"{forecast_date.date()} (need ≥ 104 weeks, found {len(history)})."
+        )}
+
+    try:
+        series = history["total_quantity"].astype(float)
+        model = ExponentialSmoothing(
+            series,
+            trend="add",
+            seasonal="add",
+            seasonal_periods=52,
+            initialization_method="estimated",
+        )
+        fitted = model.fit(optimized=True, remove_bias=True)
+        # Forecast 1 step ahead (the week immediately after history ends)
+        fcast = fitted.forecast(1)
+        prediction = max(0.0, round(float(fcast.iloc[0]), 2))
+    except Exception as exc:
+        return {"error": f"Holt-Winters fitting failed for {drug_name}: {exc}"}
+
+    # Historical context (same structure as generate_forecast)
+    seasonal_avg = float(
+        history[history["week_start_date"].dt.isocalendar().week
+                == forecast_date.isocalendar()[1]]["total_quantity"].mean()
+    ) if len(history) > 0 else float(history["total_quantity"].mean())
+    recent_avg = float(history["total_quantity"].tail(4).mean())
+
+    # Use 2025 per-drug HW MAE as confidence width (fallback to 5.0)
+    HW_MAE_BY_DRUG = {
+        "M01AB": 7.79, "M01AE": 4.62, "N02BA": 4.84, "N02BE": 45.64,
+        "N05B": 13.77, "N05C": 1.95,  "R03": 18.49,  "R06": 7.74,
+    }
+    hw_mae = HW_MAE_BY_DRUG.get(drug_name, 5.0)
+
+    return {
+        "drug":             drug_name,
+        "drug_description": DRUG_DESCRIPTIONS.get(drug_name, drug_name),
+        "volume_segment":   VOLUME_SEGMENTS.get(drug_name, "Medium"),
+        "date":             str(forecast_date.date()),
+        "prediction":       prediction,
+        "lower_bound":      max(0.0, round(prediction - 2 * hw_mae, 2)),
+        "upper_bound":      round(prediction + 2 * hw_mae, 2),
+        "seasonal_avg":     round(seasonal_avg, 2),
+        "recent_avg":       round(recent_avg, 2),
+        "mae_2018":         hw_mae,
+        "model_used":       "Holt-Winters",
+        "error":            None,
+    }
+
 
 def load_model():
     global _model_cache
@@ -104,6 +216,74 @@ def load_2019_predictions() -> pd.DataFrame:
 
 def load_quarterly_analysis() -> pd.DataFrame:
     return pd.read_csv(RESULTS_DIR / "validation_2019" / "2019_quarterly_analysis.csv")
+
+
+# ── 2025 Out-of-Sample Validation Results ─────────────────────────────────────
+
+def load_2025_metrics() -> dict:
+    """Return pre-computed overall 2025 test metrics for all three models."""
+    return {
+        "xgb": {"mae": 14.29, "rmse": 24.85, "mape": 28.54, "wmape": 25.11, "r2": 0.8774},
+        "hw":  {"mae": 13.11, "rmse": 23.23, "mape": 29.23, "wmape": 23.02, "r2": 0.8928},
+        "sar": {"mae": 68.43, "rmse": 136.38, "mape": 133.43, "wmape": 120.20, "r2": -2.693},
+    }
+
+
+def load_2025_predictions() -> pd.DataFrame:
+    """Load 2025 per-week predictions for all three models."""
+    df = pd.read_csv(
+        RESULTS_DIR / "validation_2025" / "2025_predictions.csv",
+        parse_dates=["week_start_date"],
+    )
+    return df  # columns: week_start_date, drug_name, total_quantity, xgb_pred, hw_pred, sarima_pred, ...
+
+
+def load_2025_per_drug() -> pd.DataFrame:
+    """Load 2025 per-drug metric comparison (XGBoost vs HW vs SARIMA)."""
+    return pd.read_csv(RESULTS_DIR / "validation_2025" / "2025_per_drug_comparison.csv")
+
+
+def load_2025_quarterly() -> pd.DataFrame:
+    """Load 2025 quarterly breakdown for all three models."""
+    return pd.read_csv(RESULTS_DIR / "validation_2025" / "2025_quarterly_analysis.csv")
+
+
+def build_2025_comparison() -> pd.DataFrame:
+    """
+    Build a per-drug comparison table for the 2025 test period using the
+    legacy dashboard/drift template column names:
+
+      MAE_2018       → XGBoost 2025 per-drug MAE  (primary model)
+      MAE_2019       → Holt-Winters 2025 per-drug MAE  (best competitor)
+      MAPE_2019      → XGBoost 2025 WMAPE
+      R2_2019        → XGBoost 2025 R²
+      Change_Percent → % by which HW MAE differs from XGB MAE
+                        (negative = HW better)
+      Status         → "Degraded" when XGB MAE > HW MAE by > 20 %
+    """
+    per_drug = load_2025_per_drug()
+    rows = []
+    for _, r in per_drug.iterrows():
+        xgb_mae = float(r["XGB_MAE"])
+        hw_mae  = float(r["HW_MAE"])
+        # positive → XGB worse than HW; negative → XGB better
+        xgb_vs_hw_pct = (xgb_mae - hw_mae) / hw_mae * 100 if hw_mae > 0 else 0.0
+        change        = round((hw_mae - xgb_mae) / xgb_mae * 100, 1) if xgb_mae > 0 else 0.0
+        status = "Degraded" if xgb_vs_hw_pct > 20 else "On Track"
+        rows.append({
+            "Drug":           r["Drug"],
+            "Segment":        r.get("Segment", ""),
+            "MAE_2018":       round(xgb_mae, 2),   # XGBoost 2025
+            "MAE_2019":       round(hw_mae, 2),    # Holt-Winters 2025
+            "MAPE_2019":      round(float(r["XGB_WMAPE"]), 2),
+            "R2_2019":        round(float(r["XGB_R2"]), 4),
+            "Change_Percent": change,
+            "Status":         status,
+            "Winner":         str(r.get("Winner", "")),
+            "HW_R2":          round(float(r.get("HW_R2", 0)), 4),
+            "SAR_MAE":        round(float(r.get("SAR_MAE", 0)), 2),
+        })
+    return pd.DataFrame(rows)
 
 
 # ── Feature engineering for live forecast ─────────────────────────────────────
@@ -264,15 +444,45 @@ def compute_features_for_date(drug_name: str, forecast_date) -> tuple:
 def generate_forecast(drug_name: str, forecast_date) -> dict:
     """
     Generate a sales forecast for drug_name on forecast_date.
-    Returns a dict with prediction, bounds, and context info.
-    """
-    feature_df, err = compute_features_for_date(drug_name, forecast_date)
-    if err:
-        return {"error": err}
 
-    model      = load_model()
-    prediction = float(model.predict(feature_df)[0])
-    prediction = max(0.0, round(prediction, 2))
+    Strategy:
+      1. If drug_name is in HW_PREFERRED_DRUGS, use Holt-Winters directly.
+      2. Otherwise try XGBoost first.
+      3. If XGBoost fails for any reason (not enough history, feature
+         mismatch, unknown drug …) fall back to Holt-Winters automatically.
+
+    Returns a dict with prediction, bounds, and context info.
+    Includes `model_used` key so callers can show which model was used.
+    """
+    # ── Step 1: route low-volume / HW-preferred drugs directly ───────────────
+    if drug_name in HW_PREFERRED_DRUGS:
+        result = generate_hw_forecast(drug_name, forecast_date)
+        if result.get("error") is None:
+            return result
+        # HW also failed — fall through to XGBoost attempt below
+
+    # ── Step 2: try XGBoost ───────────────────────────────────────────────────
+    try:
+        feature_df, err = compute_features_for_date(drug_name, forecast_date)
+        if err:
+            raise ValueError(err)
+
+        model      = load_model()
+        prediction = float(model.predict(feature_df)[0])
+        prediction = max(0.0, round(prediction, 2))
+        xgb_ok     = True
+    except Exception as xgb_exc:
+        xgb_ok    = False
+        xgb_error = str(xgb_exc)
+
+    # ── Step 3: fall back to Holt-Winters if XGBoost failed ───────────────────
+    if not xgb_ok:
+        hw_result = generate_hw_forecast(drug_name, forecast_date)
+        if hw_result.get("error") is None:
+            hw_result["fallback_reason"] = xgb_error
+            return hw_result
+        # Both models failed
+        return {"error": f"XGBoost: {xgb_error} | Holt-Winters: {hw_result['error']}"}
 
     # Historical context
     df       = load_historical_data()
@@ -306,6 +516,7 @@ def generate_forecast(drug_name: str, forecast_date) -> dict:
         "seasonal_avg":      round(seasonal_avg, 2),
         "recent_avg":        round(recent_avg, 2),
         "mae_2018":          mae_2018,
+        "model_used":        "XGBoost",
         "error":             None,
     }
 
