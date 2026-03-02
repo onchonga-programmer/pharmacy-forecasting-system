@@ -1,16 +1,16 @@
 {% extends "forecasting/base.html" %}
 
-{% block title %}Live Forecast — Pharmacy Forecast System{% endblock %}
+{% block title %}Sales Forecast — Pharmacy Forecast System{% endblock %}
 
 {% block breadcrumb %}
-<li class="breadcrumb-item active">Live Forecast</li>
+<li class="breadcrumb-item active">Sales Forecast</li>
 {% endblock %}
 
 {% block content %}
 <div class="d-flex align-items-center justify-content-between mb-3">
     <div>
-        <h4 class="mb-0 fw-bold">Live Forecast</h4>
-        <small class="text-muted">Get a predicted sales quantity for any drug and week &mdash; powered by the forecasting system</small>
+        <h4 class="mb-0 fw-bold">Sales Forecast</h4>
+        <small class="text-muted">Get a sales prediction for any drug. Select a drug and date to get started.</small>
     </div>
 </div>
 
@@ -22,31 +22,31 @@
         <!-- Single forecast -->
         <div class="chart-card mb-4">
             <h6 class="fw-semibold mb-3">
-                <i class="bi bi-magic me-2 text-primary"></i>Single Drug Forecast
+                <i class="bi bi-magic me-2 text-primary"></i>Predict Sales for One Drug
             </h6>
             <form method="post">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="single">
 
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">Drug (ATC Code)</label>
-                    <select name="drug_name" class="form-select" required>
+                    <label class="form-label fw-semibold">Select Drug</label>
+                    <select name="drug_name" class="form-select" required id="drug-select">
                         <option value="">— Select a drug —</option>
-                        {% for drug in drug_list %}
-                        <option value="{{ drug }}"
-                            {% if form_data.drug_name == drug %}selected{% endif %}>
-                            {{ drug }} — {{ drug_descriptions|default_if_none:"" }}
-                            {% if drug == "N02BE" %}⚠ Use With Caution{% endif %}
+                        {% for code, desc in drug_options %}
+                        <option value="{{ code }}"
+                            {% if form_data.drug_name == code %}selected{% endif %}>
+                            {{ code }} — {{ desc }}
                         </option>
                         {% endfor %}
                     </select>
-                    <div class="form-text text-muted">
-                        ⚠ N02BE (Paracetamol) became much harder to predict in 2019 — treat its forecast with caution.
+                    <div class="form-text text-warning fw-semibold mt-1" id="n02be-warning"
+                         style="display: none;">
+                        ⚠ N02BE (Paracetamol) — predictions for this drug are less reliable. We recommend checking stock manually.
                     </div>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">Forecast Date</label>
+                    <label class="form-label fw-semibold">Select Week</label>
                     <input type="date"
                            name="forecast_date"
                            class="form-control"
@@ -55,7 +55,7 @@
                            max="2030-12-31"
                            required>
                     <div class="form-text text-muted">
-                        Pick any week — the system needs at least 1 year of past sales data before it can forecast.
+                        Choose the week you want to predict sales for.
                     </div>
                 </div>
 
@@ -68,11 +68,10 @@
         <!-- CSV batch upload -->
         <div class="chart-card">
             <h6 class="fw-semibold mb-1">
-                <i class="bi bi-file-earmark-spreadsheet me-2 text-success"></i>Batch Forecast (CSV Upload)
+                <i class="bi bi-file-earmark-spreadsheet me-2 text-primary"></i>Predict Multiple Drugs at Once
             </h6>
             <p class="text-muted small mb-3">
-                Upload a CSV with columns <code>drug_name</code> and <code>datum</code>
-                to forecast multiple drugs at once.
+                Upload a file to get predictions for multiple drugs at the same time.
             </p>
 
             <form method="post" enctype="multipart/form-data">
@@ -82,23 +81,16 @@
                     <label class="form-label fw-semibold">CSV File</label>
                     <input type="file" name="csv_file" class="form-control form-control-sm" accept=".csv" required>
                 </div>
-                <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-success btn-sm flex-grow-1">
-                        <i class="bi bi-upload me-1"></i>Upload &amp; Forecast
-                    </button>
-                    <a href="{% url 'forecasting:sample_csv' %}"
-                       class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-download me-1"></i>Template
+                <div class="mb-3 p-2 rounded" style="background:#eff6ff; font-size:.8rem; color:#0369a1;">
+                    <i class="bi bi-info-circle me-1"></i>Not sure about the file format?
+                    <a href="{% url 'forecasting:sample_csv' %}" class="fw-semibold text-decoration-none">
+                        <i class="bi bi-download me-1"></i>Download the template first.
                     </a>
                 </div>
+                <button type="submit" class="btn btn-primary btn-sm w-100">
+                    <i class="bi bi-upload me-1"></i>Upload &amp; Generate Forecasts
+                </button>
             </form>
-
-            <div class="mt-3 p-2 rounded" style="background:#f8f9fa; font-size:.78rem;">
-                <strong>CSV format example:</strong><br>
-                <code>drug_name,datum<br>
-                M01AB,2020-03-02<br>
-                N02BE,2020-03-02</code>
-            </div>
         </div>
 
     </div><!-- /col -->
@@ -168,6 +160,25 @@
             </div>
             {% endif %}
         </div>
+
+        <!-- Sales trend chart -->
+        {% if forecast_chart_json %}
+        <div class="chart-card mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="mb-0 fw-semibold"><i class="bi bi-graph-up me-2 text-primary"></i>Sales Trend</h6>
+                <small class="text-muted">Past 12 weeks &amp; next 12 weeks forecast</small>
+            </div>
+            {% if forecast_4w_total %}
+            <div class="py-2 px-3 mb-2 rounded" style="background:#eff6ff; font-size:.84rem; color:#0369a1;">
+                <i class="bi bi-info-circle me-1"></i>
+                Based on recent trends, we expect to sell approximately
+                <strong>{{ forecast_4w_total }}</strong> units of <strong>{{ result.drug }}</strong>
+                over the next 4 weeks.
+            </div>
+            {% endif %}
+            <div id="forecast-trend-chart"></div>
+        </div>
+        {% endif %}
 
         <!-- Model info strip -->
         <div class="chart-card">
@@ -243,18 +254,18 @@
         {% if not result and not batch_results %}
         <div class="chart-card h-100 d-flex flex-column align-items-center justify-content-center text-center py-5"
              style="min-height: 260px;">
-            <i class="bi bi-magic fs-1 text-muted mb-3"></i>
-            <h6 class="fw-semibold text-muted">No Forecast Yet</h6>
-            <p class="text-muted small mb-0">
-                Select a drug and forecast date on the left,<br>
-                then click <strong>Generate Forecast</strong>.
+            <i class="bi bi-graph-up-arrow fs-1 mb-3" style="color:#0284c7; opacity:.5;"></i>
+            <h6 class="fw-semibold" style="color:#475569;">Your forecast will appear here</h6>
+            <p class="small mb-4" style="color:#64748b; max-width:280px;">
+                Select a drug and week on the left, then click
+                <strong>Generate Forecast</strong>.
             </p>
-            <div class="mt-4 d-flex gap-2">
+            <div class="mt-1 d-flex gap-2">
                 <a href="{% url 'forecasting:results' %}" class="btn btn-outline-primary btn-sm">
                     <i class="bi bi-graph-up me-1"></i>View Past Results
                 </a>
-                <a href="{% url 'forecasting:drift' %}" class="btn btn-outline-warning btn-sm">
-                    <i class="bi bi-exclamation-triangle me-1"></i>Accuracy Monitor
+                <a href="{% url 'forecasting:drift' %}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-bar-chart-steps me-1"></i>Forecast Performance
                 </a>
             </div>
         </div>
@@ -262,4 +273,24 @@
 
     </div><!-- /col -->
 </div><!-- /row -->
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var select  = document.getElementById('drug-select');
+    var warning = document.getElementById('n02be-warning');
+    if (!select || !warning) return;
+    select.addEventListener('change', function () {
+        warning.style.display = (this.value === 'N02BE') ? 'block' : 'none';
+    });
+})();
+</script>
+
+{% if forecast_chart_json %}
+<script>
+const trendChartData = JSON.parse('{{ forecast_chart_json|escapejs }}');
+Plotly.newPlot('forecast-trend-chart', trendChartData.data, trendChartData.layout, {responsive: true, displayModeBar: false});
+</script>
+{% endif %}
 {% endblock %}

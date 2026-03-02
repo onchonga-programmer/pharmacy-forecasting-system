@@ -521,6 +521,61 @@ def generate_forecast(drug_name: str, forecast_date) -> dict:
     }
 
 
+def get_forecast_chart_data(drug_name: str, forecast_date) -> dict:
+    """
+    Returns 12 weeks of actual past sales and 12 weeks of predicted future
+    sales for the sales trend line chart.
+    Fits Holt-Winters on all historical data up to forecast_date so the
+    predictions are grounded in the correct window.
+    """
+    try:
+        target_ts = pd.Timestamp(forecast_date)
+        df        = load_historical_data()
+        drug_df   = (
+            df[df["drug_name"] == drug_name]
+            .sort_values("week_start_date")
+            .reset_index(drop=True)
+        )
+
+        train_df = drug_df[drug_df["week_start_date"] < target_ts]
+        if len(train_df) < 60:
+            return {"error": "Not enough historical data to build chart"}
+
+        # ── Past 12 weeks of actual sales ────────────────────────────────────
+        past_df    = train_df.tail(12)
+        past_dates = [str(d.date()) for d in past_df["week_start_date"]]
+        past_sales = [round(float(v), 1) for v in past_df["total_quantity"]]
+
+        # ── Fit HW on all training values, forecast 12 steps ahead ──────────
+        series   = train_df["total_quantity"].values.astype(float)
+        hw_model = ExponentialSmoothing(
+            series,
+            trend="add",
+            seasonal="add",
+            seasonal_periods=52,
+            initialization_method="estimated",
+        )
+        hw_fit    = hw_model.fit(optimized=True)
+        raw_preds = hw_fit.forecast(12)
+
+        future_dates = [
+            str((target_ts + pd.Timedelta(weeks=i)).date()) for i in range(12)
+        ]
+        future_preds = [max(0.0, round(float(v), 1)) for v in raw_preds]
+        forecast_4w  = round(sum(future_preds[:4]))
+
+        return {
+            "past_dates":   past_dates,
+            "past_sales":   past_sales,
+            "future_dates": future_dates,
+            "future_preds": future_preds,
+            "forecast_4w":  forecast_4w,
+            "error":        None,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def process_csv_forecast(file_obj) -> list:
     """
     Batch forecast from uploaded CSV (columns: drug_name, datum).

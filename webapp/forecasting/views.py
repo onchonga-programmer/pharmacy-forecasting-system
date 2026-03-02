@@ -245,9 +245,11 @@ def results(request):
 # ── Live Forecast ─────────────────────────────────────────────────────────────
 
 def forecast(request):
-    result        = None
-    batch_results = None
-    form_data     = {}
+    result             = None
+    batch_results      = None
+    form_data          = {}
+    forecast_chart_json = None
+    forecast_4w_total   = None
 
     if request.method == "POST":
         action = request.POST.get("action", "single")
@@ -259,6 +261,47 @@ def forecast(request):
 
             if drug_name and forecast_date:
                 result = ml_engine.generate_forecast(drug_name, forecast_date)
+
+                # Build 12-week trend chart when single forecast succeeds
+                if result and not result.get("error"):
+                    _cd = ml_engine.get_forecast_chart_data(drug_name, forecast_date)
+                    if not _cd.get("error"):
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(
+                            x=_cd["past_dates"],
+                            y=_cd["past_sales"],
+                            name="Past Sales",
+                            mode="lines+markers",
+                            line=dict(color="#0284c7", width=2),
+                            marker=dict(size=5, color="#0284c7"),
+                        ))
+                        fig.add_trace(go.Scatter(
+                            x=_cd["future_dates"],
+                            y=_cd["future_preds"],
+                            name="Expected Sales",
+                            mode="lines+markers",
+                            line=dict(color="#0284c7", width=2, dash="dot"),
+                            marker=dict(size=5, color="#0284c7", symbol="circle-open"),
+                        ))
+                        fig.update_layout(
+                            xaxis_title="Week",
+                            yaxis_title="Units Sold",
+                            template="plotly_white",
+                            legend=dict(orientation="h", yanchor="bottom",
+                                        y=1.02, xanchor="right", x=1),
+                            height=280,
+                            margin=dict(l=40, r=30, t=30, b=40),
+                            hovermode="x unified",
+                            shapes=[dict(
+                                type="line", xref="x", yref="paper",
+                                x0=_cd["future_dates"][0],
+                                x1=_cd["future_dates"][0],
+                                y0=0, y1=1,
+                                line=dict(color="#94a3b8", width=1, dash="dash"),
+                            )],
+                        )
+                        forecast_chart_json = _fig_json(fig)
+                        forecast_4w_total   = _cd["forecast_4w"]
             else:
                 result = {"error": "Please select a drug and a forecast date."}
 
@@ -270,12 +313,15 @@ def forecast(request):
                 result = {"error": "Please upload a CSV file."}
 
     context = {
-        "result":            result,
-        "batch_results":     batch_results,
-        "drug_list":         ml_engine.DRUG_LIST,
-        "drug_descriptions": ml_engine.DRUG_DESCRIPTIONS,
-        "form_data":         form_data,
-        "page":              "forecast",
+        "result":             result,
+        "batch_results":      batch_results,
+        "drug_list":          ml_engine.DRUG_LIST,
+        "drug_descriptions":  ml_engine.DRUG_DESCRIPTIONS,
+        "drug_options":       [(code, ml_engine.DRUG_DESCRIPTIONS.get(code, code)) for code in ml_engine.DRUG_LIST],
+        "form_data":          form_data,
+        "forecast_chart_json": forecast_chart_json,
+        "forecast_4w_total":   forecast_4w_total,
+        "page":               "forecast",
     }
     return render(request, "forecasting/forecast.html", context)
 
@@ -299,36 +345,27 @@ def drift(request):
         cmp_sorted = cmp_df.sort_values("MAE_2019", ascending=True)  # sort by HW MAE
         fig = go.Figure()
         fig.add_trace(go.Bar(
-            name="Primary Method",
+            name="Main Forecast Method",
             y=cmp_sorted["Drug"].tolist(),
             x=cmp_sorted["MAE_2018"].tolist(),      # MAE_2018 = XGB_MAE
             orientation="h",
-            marker_color="#0d6efd",
+            marker_color="#0284c7",
             text=[f"{v:.2f}" for v in cmp_sorted["MAE_2018"]],
             textposition="outside",
         ))
         fig.add_trace(go.Bar(
-            name="Backup Method",
+            name="Backup Forecast Method",
             y=cmp_sorted["Drug"].tolist(),
             x=cmp_sorted["MAE_2019"].tolist(),      # MAE_2019 = HW_MAE
             orientation="h",
-            marker_color="#198754",
+            marker_color="#38bdf8",
             text=[f"{v:.2f}" for v in cmp_sorted["MAE_2019"]],
-            textposition="outside",
-        ))
-        fig.add_trace(go.Bar(
-            name="Third Method",
-            y=cmp_sorted["Drug"].tolist(),
-            x=cmp_sorted["SAR_MAE"].tolist(),
-            orientation="h",
-            marker_color="#dc3545",
-            text=[f"{v:.2f}" for v in cmp_sorted["SAR_MAE"]],
             textposition="outside",
         ))
         fig.update_layout(
             barmode="group",
-            title=dict(text="2025 Forecast Accuracy by Drug", font=dict(size=14)),
-            xaxis_title="Average Weekly Error (units)",
+            title=dict(text="Prediction Accuracy by Drug — 2025", font=dict(size=14)),
+            xaxis_title="Average Weekly Prediction Error (units) — lower is better",
             template="plotly_white",
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             height=460,
@@ -348,6 +385,7 @@ def drift(request):
             "drugs_stable":   drugs_stable,
             "total_drugs":    len(cmp_df),
             "drift_chart":    _fig_json(fig),
+            "r2_display_pct": round(xgb["r2"] * 100, 1),
             "page":           "drift",
         }
     except Exception as e:

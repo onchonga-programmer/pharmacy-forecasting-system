@@ -1,16 +1,16 @@
 {% extends "forecasting/base.html" %}
 
-{% block title %}Accuracy Monitor — Pharmacy Forecast System{% endblock %}
+{% block title %}Forecast Performance — Pharmacy Forecast System{% endblock %}
 
 {% block breadcrumb %}
-<li class="breadcrumb-item active">Accuracy Monitor</li>
+<li class="breadcrumb-item active">Forecast Performance</li>
 {% endblock %}
 
 {% block content %}
 <div class="d-flex align-items-center justify-content-between mb-3">
     <div>
-        <h4 class="mb-0 fw-bold">Forecast Accuracy Monitor</h4>
-        <small class="text-muted">Forecast accuracy across all drugs — verified on 2025 data not used during training</small>
+        <h4 class="mb-0 fw-bold">Forecast Performance</h4>
+        <small class="text-muted">How well the system predicted drug demand in 2025</small>
     </div>
 </div>
 
@@ -20,46 +20,45 @@
     <i class="bi bi-bar-chart-steps fs-5 mt-1"></i>
     <div>
         <strong>Accuracy Note:</strong>
-        {{ drugs_drifted }} out of {{ total_drugs }} drug{% if drugs_drifted != 1 %}s{% endif %}
-        have a higher forecast error than expected in the 2025 test.
-        The overall system accuracy score is {{ r2_2018 }} / 1.0.
+        {{ drugs_drifted }} out of {{ total_drugs }} drug{% if drugs_drifted != 1 %}s are{% else %} is{% endif %} performing below expectations.
+        Overall the system correctly predicts {{ r2_display_pct }}% of demand variation across all drugs.
     </div>
 </div>
 {% else %}
 <div class="alert alert-success d-flex align-items-start gap-2 mb-4">
     <i class="bi bi-check-circle-fill fs-5 mt-1"></i>
-    <div>All {{ total_drugs }} drugs are forecasting within the expected accuracy range for the 2025 test.</div>
+    <div>All {{ total_drugs }} drugs are performing within expectations. The system correctly predicts {{ r2_display_pct }}% of demand variation across all drugs.</div>
 </div>
 {% endif %}
 
 <!-- ── Summary metric cards ───────────────────────────────────────────── -->
 <div class="row g-3 mb-4">
     <div class="col-sm-6 col-lg-3">
-        <div class="metric-card h-100" style="background:#e9f7ef;">
-            <div class="metric-value text-success">{{ drugs_stable }}</div>
-            <div class="metric-label text-success">Drugs On Target</div>
+        <div class="metric-card h-100" style="background:#eff6ff;">
+            <div class="metric-value" style="color:#0284c7;">{{ drugs_stable }}</div>
+            <div class="metric-label" style="color:#0284c7;">Drugs On Target</div>
             <div class="metric-hint text-muted">Forecast accuracy within expected range in 2025</div>
         </div>
     </div>
     <div class="col-sm-6 col-lg-3">
-        <div class="metric-card h-100" style="background:#fdf0f0;">
-            <div class="metric-value text-danger">{{ drugs_drifted }}</div>
-            <div class="metric-label text-danger">Drugs Needing Review</div>
+        <div class="metric-card h-100" style="background:#eff6ff;">
+            <div class="metric-value" style="color:#0284c7;">{{ drugs_drifted }}</div>
+            <div class="metric-label" style="color:#0284c7;">Drugs Needing Review</div>
             <div class="metric-hint text-muted">Forecast accuracy below expected range in 2025</div>
         </div>
     </div>
     <div class="col-sm-6 col-lg-3">
-        <div class="metric-card h-100" style="background:#fff8e1;">
-            <div class="metric-value text-warning">{{ mae_threshold }} units</div>
-            <div class="metric-label text-warning">Acceptable Error Limit</div>
-            <div class="metric-hint text-muted">Maximum acceptable average weekly forecast error ({{ mae_2018 }} units + 20% tolerance)</div>
+        <div class="metric-card h-100" style="background:#eff6ff;">
+            <div class="metric-value" style="color:#0284c7;">{{ mae_threshold }} units</div>
+            <div class="metric-label" style="color:#0284c7;">Acceptable Weekly Error</div>
+            <div class="metric-hint text-muted">Forecasts within {{ mae_threshold }} units are considered accurate</div>
         </div>
     </div>
     <div class="col-sm-6 col-lg-3">
-        <div class="metric-card h-100" style="background:#e8f0fe;">
-            <div class="metric-value text-primary">{{ mape_threshold }}%</div>
-            <div class="metric-label text-primary">Acceptable Error % Limit</div>
-            <div class="metric-hint text-muted">Maximum acceptable forecast error percentage ({{ mape_2018 }}% + 20% tolerance)</div>
+        <div class="metric-card h-100" style="background:#eff6ff;">
+            <div class="metric-value" style="color:#0284c7;">{{ mape_threshold }}%</div>
+            <div class="metric-label" style="color:#0284c7;">Acceptable Error Rate</div>
+            <div class="metric-hint text-muted">Forecasts within {{ mape_threshold }}% are considered acceptable</div>
         </div>
     </div>
 </div>
@@ -72,8 +71,8 @@
 <!-- ── Per-drug accuracy table ─────────────────────────────────────────── -->
 <div class="table-card">
     <div class="p-3 border-bottom d-flex align-items-center justify-content-between">
-        <h6 class="mb-0 fw-semibold">Drug-by-Drug Accuracy — 2025 Test</h6>
-        <small class="text-muted">All drugs tested on 2025 data not used during training</small>
+        <h6 class="mb-0 fw-semibold">Drug-by-Drug Breakdown</h6>
+        <small class="text-muted">Results from 2025 — data the system had never seen before</small>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
