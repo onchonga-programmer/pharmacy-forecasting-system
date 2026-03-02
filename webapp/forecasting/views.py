@@ -49,7 +49,7 @@ def dashboard(request):
         # ── MAE comparison bar chart — XGBoost vs HW vs SARIMA ──
         fig = go.Figure(data=[
             go.Bar(
-                name="XGBoost (2025 test)",
+                name="Primary Method (2025)",
                 x=cmp_df["Drug"].tolist(),
                 y=cmp_df["MAE_2018"].tolist(),      # MAE_2018 = XGB_MAE
                 marker_color="#0d6efd",
@@ -57,7 +57,7 @@ def dashboard(request):
                 textposition="outside",
             ),
             go.Bar(
-                name="Holt-Winters (2025 test)",
+                name="Backup Method (2025)",
                 x=cmp_df["Drug"].tolist(),
                 y=cmp_df["MAE_2019"].tolist(),      # MAE_2019 = HW_MAE
                 marker_color="#198754",
@@ -65,7 +65,7 @@ def dashboard(request):
                 textposition="outside",
             ),
             go.Bar(
-                name="SARIMA (2025 test)",
+                name="Third Method (2025)",
                 x=cmp_df["Drug"].tolist(),
                 y=cmp_df["SAR_MAE"].tolist(),
                 marker_color="#dc3545",
@@ -75,9 +75,9 @@ def dashboard(request):
         ])
         fig.update_layout(
             barmode="group",
-            title=dict(text="MAE per Drug — XGBoost vs Holt-Winters vs SARIMA (2025 Test)", font=dict(size=14)),
+            title=dict(text="Forecast Error by Drug — 2025 Test", font=dict(size=14)),
             xaxis_title="Drug (ATC Code)",
-            yaxis_title="Mean Absolute Error (units)",
+            yaxis_title="Average Weekly Error (units)",
             template="plotly_white",
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             height=380,
@@ -131,22 +131,22 @@ def results(request):
             ))
             fig.add_trace(go.Scatter(
                 x=dates, y=xgb_pred,
-                mode="lines+markers", name="XGBoost",
+                mode="lines+markers", name="Forecast",
                 line=dict(color="#0d6efd", width=2, dash="dash"), marker=dict(size=4),
             ))
             fig.add_trace(go.Scatter(
                 x=dates, y=hw_pred,
-                mode="lines+markers", name="Holt-Winters",
+                mode="lines+markers", name="Backup Method",
                 line=dict(color="#198754", width=2, dash="dot"), marker=dict(size=4),
             ))
             fig.add_trace(go.Scatter(
                 x=dates, y=sar_pred,
-                mode="lines+markers", name="SARIMA",
+                mode="lines+markers", name="Third Method",
                 line=dict(color="#dc3545", width=1.5, dash="dashdot"), marker=dict(size=4),
             ))
             fig.update_layout(
                 title=dict(
-                    text=f"{selected_drug} — Actual vs All Models (2025 Out-of-Sample Test)",
+                    text=f"{selected_drug} — Actual Sales vs Forecast (2025)",
                     font=dict(size=15),
                 ),
                 xaxis_title="Week",
@@ -185,10 +185,10 @@ def results(request):
             fig.add_trace(go.Scatter(x=dates, y=actual, mode="lines+markers",
                 name="Actual Sales", line=dict(color="#0d6efd", width=2), marker=dict(size=5)))
             fig.add_trace(go.Scatter(x=dates, y=predicted, mode="lines+markers",
-                name="XGBoost Predicted", line=dict(color="#fd7e14", width=2, dash="dash"),
+                name="Forecast", line=dict(color="#fd7e14", width=2, dash="dash"),
                 marker=dict(size=5)))
             fig.update_layout(
-                title=dict(text=f"{selected_drug} — Actual vs Predicted (2018)", font=dict(size=15)),
+                title=dict(text=f"{selected_drug} — Actual vs Forecast (2018)", font=dict(size=15)),
                 xaxis_title="Week", yaxis_title="Sales Quantity (units)",
                 template="plotly_white",
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -209,10 +209,10 @@ def results(request):
             fig.add_trace(go.Scatter(x=dates, y=actual, mode="lines+markers",
                 name="Actual Sales", line=dict(color="#0d6efd", width=2), marker=dict(size=5)))
             fig.add_trace(go.Scatter(x=dates, y=predicted, mode="lines+markers",
-                name="XGBoost Predicted", line=dict(color="#fd7e14", width=2, dash="dash"),
+                name="Forecast", line=dict(color="#fd7e14", width=2, dash="dash"),
                 marker=dict(size=5)))
             fig.update_layout(
-                title=dict(text=f"{selected_drug} — Actual vs Predicted (2019)", font=dict(size=15)),
+                title=dict(text=f"{selected_drug} — Actual vs Forecast (2019)", font=dict(size=15)),
                 xaxis_title="Week", yaxis_title="Sales Quantity (units)",
                 template="plotly_white",
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -299,7 +299,7 @@ def drift(request):
         cmp_sorted = cmp_df.sort_values("MAE_2019", ascending=True)  # sort by HW MAE
         fig = go.Figure()
         fig.add_trace(go.Bar(
-            name="XGBoost 2025 MAE",
+            name="Primary Method",
             y=cmp_sorted["Drug"].tolist(),
             x=cmp_sorted["MAE_2018"].tolist(),      # MAE_2018 = XGB_MAE
             orientation="h",
@@ -308,7 +308,7 @@ def drift(request):
             textposition="outside",
         ))
         fig.add_trace(go.Bar(
-            name="Holt-Winters 2025 MAE",
+            name="Backup Method",
             y=cmp_sorted["Drug"].tolist(),
             x=cmp_sorted["MAE_2019"].tolist(),      # MAE_2019 = HW_MAE
             orientation="h",
@@ -317,7 +317,7 @@ def drift(request):
             textposition="outside",
         ))
         fig.add_trace(go.Bar(
-            name="SARIMA 2025 MAE",
+            name="Third Method",
             y=cmp_sorted["Drug"].tolist(),
             x=cmp_sorted["SAR_MAE"].tolist(),
             orientation="h",
@@ -327,8 +327,8 @@ def drift(request):
         ))
         fig.update_layout(
             barmode="group",
-            title=dict(text="2025 Out-of-Sample MAE: XGBoost vs Holt-Winters vs SARIMA (per Drug)", font=dict(size=14)),
-            xaxis_title="Mean Absolute Error (units)",
+            title=dict(text="2025 Forecast Accuracy by Drug", font=dict(size=14)),
+            xaxis_title="Average Weekly Error (units)",
             template="plotly_white",
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             height=460,
