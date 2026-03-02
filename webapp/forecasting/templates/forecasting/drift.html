@@ -1,16 +1,16 @@
 {% extends "forecasting/base.html" %}
 
-{% block title %}Drift Monitor — Pharmacy Forecast System{% endblock %}
+{% block title %}Accuracy Monitor — Pharmacy Forecast System{% endblock %}
 
 {% block breadcrumb %}
-<li class="breadcrumb-item active">Drift Monitor</li>
+<li class="breadcrumb-item active">Accuracy Monitor</li>
 {% endblock %}
 
 {% block content %}
 <div class="d-flex align-items-center justify-content-between mb-3">
     <div>
         <h4 class="mb-0 fw-bold">Forecast Accuracy Monitor</h4>
-        <small class="text-muted">XGBoost vs Holt-Winters vs SARIMA — 2025 out-of-sample test (January–December 2025)</small>
+        <small class="text-muted">Forecast accuracy across all drugs — verified on 2025 data not used during training</small>
     </div>
 </div>
 
@@ -19,16 +19,16 @@
 <div class="alert alert-warning d-flex align-items-start gap-2 mb-4">
     <i class="bi bi-bar-chart-steps fs-5 mt-1"></i>
     <div>
-        <strong>Model Performance Note:</strong>
+        <strong>Accuracy Note:</strong>
         {{ drugs_drifted }} out of {{ total_drugs }} drug{% if drugs_drifted != 1 %}s{% endif %}
-        show XGBoost performing significantly worse (&gt;20&nbsp;% higher MAE) than Holt-Winters on the 2025 test.
-        XGBoost still achieves the best overall R² ({{ r2_2018 }}) and lowest WMAPE.
+        have a higher forecast error than expected in the 2025 test.
+        The overall system accuracy score is {{ r2_2018 }} / 1.0.
     </div>
 </div>
 {% else %}
 <div class="alert alert-success d-flex align-items-start gap-2 mb-4">
     <i class="bi bi-check-circle-fill fs-5 mt-1"></i>
-    <div>XGBoost is within 20 % of Holt-Winters MAE for all {{ total_drugs }} drugs in the 2025 test.</div>
+    <div>All {{ total_drugs }} drugs are forecasting within the expected accuracy range for the 2025 test.</div>
 </div>
 {% endif %}
 
@@ -37,29 +37,29 @@
     <div class="col-sm-6 col-lg-3">
         <div class="metric-card h-100" style="background:#e9f7ef;">
             <div class="metric-value text-success">{{ drugs_stable }}</div>
-            <div class="metric-label text-success">Drugs Near Parity</div>
-            <div class="metric-hint text-muted">XGBoost within 20 % of Holt-Winters MAE in 2025</div>
+            <div class="metric-label text-success">Drugs On Target</div>
+            <div class="metric-hint text-muted">Forecast accuracy within expected range in 2025</div>
         </div>
     </div>
     <div class="col-sm-6 col-lg-3">
         <div class="metric-card h-100" style="background:#fdf0f0;">
             <div class="metric-value text-danger">{{ drugs_drifted }}</div>
             <div class="metric-label text-danger">Drugs Needing Review</div>
-            <div class="metric-hint text-muted">XGBoost &gt;20 % worse than HW on 2025 MAE</div>
+            <div class="metric-hint text-muted">Forecast accuracy below expected range in 2025</div>
         </div>
     </div>
     <div class="col-sm-6 col-lg-3">
         <div class="metric-card h-100" style="background:#fff8e1;">
             <div class="metric-value text-warning">{{ mae_threshold }} units</div>
-            <div class="metric-label text-warning">XGBoost MAE + 20 % Buffer</div>
-            <div class="metric-hint text-muted">XGBoost 2025 overall MAE ({{ mae_2018 }}) + 20 % tolerance</div>
+            <div class="metric-label text-warning">Acceptable Error Limit</div>
+            <div class="metric-hint text-muted">Maximum acceptable average weekly forecast error ({{ mae_2018 }} units + 20% tolerance)</div>
         </div>
     </div>
     <div class="col-sm-6 col-lg-3">
         <div class="metric-card h-100" style="background:#e8f0fe;">
             <div class="metric-value text-primary">{{ mape_threshold }}%</div>
-            <div class="metric-label text-primary">XGBoost WMAPE + 20 % Buffer</div>
-            <div class="metric-hint text-muted">XGBoost 2025 WMAPE ({{ mape_2018 }}%) + 20 % tolerance</div>
+            <div class="metric-label text-primary">Acceptable Error % Limit</div>
+            <div class="metric-hint text-muted">Maximum acceptable forecast error percentage ({{ mape_2018 }}% + 20% tolerance)</div>
         </div>
     </div>
 </div>
@@ -72,8 +72,8 @@
 <!-- ── Per-drug accuracy table ─────────────────────────────────────────── -->
 <div class="table-card">
     <div class="p-3 border-bottom d-flex align-items-center justify-content-between">
-        <h6 class="mb-0 fw-semibold">Drug-by-Drug Accuracy — 2025 Out-of-Sample Test</h6>
-        <small class="text-muted">XGBoost vs Holt-Winters vs SARIMA on 2025 data</small>
+        <h6 class="mb-0 fw-semibold">Drug-by-Drug Accuracy — 2025 Test</h6>
+        <small class="text-muted">All drugs tested on 2025 data not used during training</small>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
@@ -81,10 +81,10 @@
                 <tr>
                     <th>Drug</th>
                     <th>What It Treats</th>
-                    <th title="XGBoost 2025 MAE per drug">XGBoost MAE <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
-                    <th title="Holt-Winters 2025 MAE per drug">HW MAE <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
-                    <th title="XGBoost weighted MAPE on 2025 test">XGB WMAPE&nbsp;% <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
-                    <th title="XGBoost R² on 2025 test (1.0=perfect)">XGB R² <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
+                    <th title="Primary method average weekly error in 2025">Avg Error (Primary) <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
+                    <th title="Backup method average weekly error in 2025">Avg Error (Backup) <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
+                    <th title="Forecast error as a percentage of actual sales">Error % <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
+                    <th title="Accuracy score in 2025 — 1.0 = perfect">Accuracy Score <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
                     <th>Error Change</th>
                     <th>Forecast Status</th>
                     <th>Chart</th>
@@ -95,7 +95,7 @@
                 <tr class="{% if row.Drug == 'N05C' %}row-critical{% elif 'Degraded' in row.Status %}row-degraded{% else %}row-stable{% endif %}">
                     <td><strong>{{ row.Drug }}</strong>
                         {% if row.Drug == 'N05C' %}
-                        <span class="badge bg-warning text-dark ms-1" style="font-size:.65rem;">XGB behind HW</span>
+                        <span class="badge bg-warning text-dark ms-1" style="font-size:.65rem;">Below expectation</span>
                         {% endif %}
                     </td>
                     <td class="text-muted small">
@@ -130,9 +130,9 @@
                     </td>
                     <td>
                         {% if row.Change_Percent < -20 %}
-                        <span class="badge badge-degraded text-white">⚠ XGB Behind</span>
+                        <span class="badge badge-degraded text-white">⚠ Needs Review</span>
                         {% else %}
-                        <span class="badge badge-stable text-white">✓ Near Parity</span>
+                        <span class="badge badge-stable text-white">✓ On Target</span>
                         {% endif %}
                     </td>
                     <td>
@@ -150,24 +150,24 @@
 
 <!-- ── Recommendations ────────────────────────────────────────────────── -->
 <div class="chart-card mt-4">
-    <h6 class="fw-semibold mb-3"><i class="bi bi-lightbulb me-2 text-warning"></i>Model Insights &amp; Recommendations</h6>
+    <h6 class="fw-semibold mb-3"><i class="bi bi-lightbulb me-2 text-warning"></i>System Insights &amp; Guidance</h6>
     <div class="row g-3">
         <div class="col-md-4">
             <div class="p-3 rounded" style="background:#e8f0fe;">
-                <div class="fw-semibold mb-1"><i class="bi bi-robot me-1"></i>XGBoost — Best R²</div>
-                <small class="text-muted">XGBoost achieves the highest R² ({{ r2_2018 }}) on 2025 data, meaning it best captures demand variability across all drugs — recommended for production use.</small>
+                <div class="fw-semibold mb-1"><i class="bi bi-graph-up-arrow me-1"></i>Primary Method — Best Overall</div>
+                <small class="text-muted">The primary forecasting method achieves the highest accuracy score ({{ r2_2018 }} / 1.0) on 2025 data, meaning it best tracks demand changes across all drugs. It is used automatically for most drugs.</small>
             </div>
         </div>
         <div class="col-md-4">
             <div class="p-3 rounded" style="background:#e9f7ef;">
-                <div class="fw-semibold mb-1"><i class="bi bi-graph-up me-1"></i>Holt-Winters — Lowest MAE</div>
-                <small class="text-muted">Holt-Winters achieves the lowest raw MAE ({{ mae_2019 }} units) in 2025. Consider it as a fallback or hybrid component for drugs where XGBoost underperforms.</small>
+                <div class="fw-semibold mb-1"><i class="bi bi-shield-check me-1"></i>Backup Method — Lowest Error</div>
+                <small class="text-muted">The backup method achieves the lowest average weekly error ({{ mae_2019 }} units) in 2025. It is used automatically for stable, low-volume drugs.</small>
             </div>
         </div>
         <div class="col-md-4">
             <div class="p-3 rounded" style="background:#fdf0f0;">
-                <div class="fw-semibold mb-1"><i class="bi bi-x-circle me-1"></i>SARIMA — Struggling</div>
-                <small class="text-muted">SARIMA performs poorly in 2025 (very high MAE &amp; WMAPE). It is not recommended for deployment in its current configuration.</small>
+                <div class="fw-semibold mb-1"><i class="bi bi-info-circle me-1"></i>Model Selection is Automatic</div>
+                <small class="text-muted">The system selects the best approach for each drug automatically. You do not need to choose or configure a forecasting method.</small>
             </div>
         </div>
     </div>

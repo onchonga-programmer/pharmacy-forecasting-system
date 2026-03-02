@@ -176,10 +176,10 @@
 <div class="d-flex align-items-center justify-content-between mb-3">
     <div>
         <h4 class="mb-0 fw-bold">Overview Dashboard</h4>
-        <small class="text-muted">Model trained on 2014–2024 &middot; Out-of-sample tested on fully unseen 2025 data</small>
+        <small class="text-muted">Based on sales data from 2014–2024 &middot; Verified against fully unseen 2025 data</small>
     </div>
     <a href="{% url 'forecasting:drift' %}" class="btn btn-sm btn-outline-danger">
-        <i class="bi bi-exclamation-triangle me-1"></i>Full Drift Report
+        <i class="bi bi-exclamation-triangle me-1"></i>Accuracy Report
     </a>
 </div>
 
@@ -191,18 +191,18 @@
     </div>
     <div class="flex-grow-1">
         <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
-            <strong class="{% if drugs_drifted == total_drugs %}text-danger{% else %}text-warning{% endif %}">Model Note</strong>
+            <strong class="{% if drugs_drifted == total_drugs %}text-danger{% else %}text-warning{% endif %}">Accuracy Note</strong>
             <span class="badge bg-warning text-dark rounded-pill px-2" style="font-size:.72rem;">
-                <i class="bi bi-bar-chart-steps me-1"></i>{{ drugs_drifted }} drug{% if drugs_drifted != 1 %}s{% endif %} XGB ≧20% behind HW
+                <i class="bi bi-bar-chart-steps me-1"></i>{{ drugs_drifted }} drug{% if drugs_drifted != 1 %}s{% endif %} need{% if drugs_drifted == 1 %}s{% endif %} attention
             </span>
         </div>
         <p class="mb-2 small text-muted" style="max-width:660px;">
             {% if drugs_drifted == total_drugs %}
-            For all <strong>{{ total_drugs }}</strong> drugs, Holt-Winters significantly outperforms XGBoost on raw MAE in the 2025 out-of-sample test.
-            XGBoost still achieves a higher R² overall ({{ r2_2018 }}) — consider a hybrid approach.
+            For all <strong>{{ total_drugs }}</strong> drugs, the backup method achieved a lower average error than the primary method in the 2025 test.
+            Overall the system still achieves a strong accuracy score ({{ r2_2018 }}). Consider reviewing forecast settings.
             {% else %}
-            <strong>{{ drugs_drifted }}</strong> of <strong>{{ total_drugs }}</strong> drug{% if drugs_drifted != 1 %}s{% endif %} show XGBoost performing significantly worse (&gt;20 % higher MAE) than Holt-Winters in 2025.
-            {{ drugs_stable }} drug{% if drugs_stable != 1 %}s{% endif %} have XGBoost within 20 % of Holt-Winters accuracy.
+            <strong>{{ drugs_drifted }}</strong> of <strong>{{ total_drugs }}</strong> drug{% if drugs_drifted != 1 %}s{% endif %} have a higher forecast error than expected in 2025.
+            {{ drugs_stable }} drug{% if drugs_stable != 1 %}s{% endif %} are forecasting within the acceptable accuracy range.
             {% endif %}
         </p>
         <div class="d-flex flex-wrap mb-2" style="gap:.3rem;">
@@ -212,7 +212,7 @@
         </div>
         <div class="d-flex gap-2 flex-wrap mt-1">
             <a href="{% url 'forecasting:drift' %}" class="btn btn-sm btn-danger">
-                <i class="bi bi-bar-chart-line me-1"></i>View Drift Report
+                <i class="bi bi-bar-chart-line me-1"></i>View Accuracy Report
             </a>
             <a href="{% url 'forecasting:results' %}" class="btn btn-sm btn-outline-secondary">
                 <i class="bi bi-graph-up me-1"></i>Drug Performance
@@ -224,8 +224,8 @@
 <div class="alert-panel clear mb-4">
     <i class="bi bi-check-circle-fill fs-4 text-success mt-1 flex-shrink-0"></i>
     <div>
-        <strong class="text-success">XGBoost Performing Well</strong>
-        <p class="mb-0 small text-muted mt-1">All {{ total_drugs }} drugs: XGBoost within 20 % of Holt-Winters on 2025 out-of-sample MAE. XGBoost R² = {{ r2_2018 }} (best overall).</p>
+        <strong class="text-success">Forecasts On Track</strong>
+        <p class="mb-0 small text-muted mt-1">All {{ total_drugs }} drugs are forecasting within the expected accuracy range. Accuracy score = {{ r2_2018 }} (out of 1.0).</p>
     </div>
 </div>
 {% endif %}
@@ -238,14 +238,14 @@
         <div class="metric-card h-100" style="background:#e8f0fe;">
             <div class="status-strip" style="background:#0d6efd;"></div>
             <div class="metric-value text-primary">{{ mae_2018 }}<small class="fs-6 fw-normal"> units</small></div>
-            <div class="metric-label text-primary">XGBoost MAE — 2025 Test</div>
-            <div class="metric-badge badge-good"><i class="bi bi-robot"></i> XGBoost &middot; ML Model</div>
-            <div class="metric-hint text-muted">{{ mape_2018 }}% WMAPE &middot; R²&nbsp;=&nbsp;{{ r2_2018 }}</div>
+            <div class="metric-label text-primary">Average Forecast Error — 2025</div>
+            <div class="metric-badge badge-good"><i class="bi bi-graph-up-arrow"></i> Forecasting System</div>
+            <div class="metric-hint text-muted">{{ mape_2018 }}% avg error &middot; Accuracy&nbsp;=&nbsp;{{ r2_2018 }}/1.0</div>
             {% widthratio r2_2018 1 100 as r2_2018_pct %}
             <div class="kpi-bar-track" title="R² accuracy score">
                 <div class="kpi-bar-fill" style="background:#198754;" data-width="{{ r2_2018_pct|default:'0' }}"></div>
             </div>
-            <div style="font-size:.68rem; color:#888; margin-top:.25rem;">R² accuracy — {{ r2_2018 }}/1.0</div>
+            <div style="font-size:.68rem; color:#888; margin-top:.25rem;">Accuracy score — {{ r2_2018 }}/1.0</div>
         </div>
     </div>
 
@@ -254,13 +254,13 @@
         <div class="metric-card h-100" style="background:#e9f7ef;">
             <div class="status-strip" style="background:#198754;"></div>
             <div class="metric-value text-success">{{ mae_2019 }}<small class="fs-6 fw-normal"> units</small></div>
-            <div class="metric-label text-success">Holt-Winters MAE — 2025 Test</div>
-            <div class="metric-badge badge-good"><i class="bi bi-graph-up-arrow"></i> Holt-Winters &middot; Best MAE</div>
-            <div class="metric-hint text-muted">{{ mape_2019 }}% MAPE &middot; R²&nbsp;=&nbsp;{{ r2_2019 }}</div>
+            <div class="metric-label text-success">Best Average Error — 2025</div>
+            <div class="metric-badge badge-good"><i class="bi bi-graph-up-arrow"></i> Lowest Error Achieved</div>
+            <div class="metric-hint text-muted">{{ mape_2019 }}% avg error &middot; Accuracy&nbsp;=&nbsp;{{ r2_2019 }}/1.0</div>
             <div class="kpi-bar-track mt-2">
                 <div class="kpi-bar-fill" style="background:#198754; width:100%;"></div>
             </div>
-            <div style="font-size:.68rem; color:#888; margin-top:.25rem;">{{ pct_change }}% vs XGBoost on MAE</div>
+            <div style="font-size:.68rem; color:#888; margin-top:.25rem;">{{ pct_change }}% vs primary method on avg error</div>
         </div>
     </div>
 
@@ -272,13 +272,13 @@
                 <i class="bi bi-bar-chart-fill text-warning" style="font-size:1.4rem;"></i>
                 <div class="metric-value text-warning">{{ pct_change }}%</div>
             </div>
-            <div class="metric-label text-warning">HW vs XGBoost on MAE</div>
-            <div class="metric-badge badge-warn"><i class="bi bi-arrow-left-right"></i> 2025 Model Comparison</div>
+            <div class="metric-label text-warning">Error Difference — 2025</div>
+            <div class="metric-badge badge-warn"><i class="bi bi-arrow-left-right"></i> 2025 Accuracy Review</div>
             <div class="metric-hint" style="color:#7d5a00;">
-                XGBoost <strong>{{ mae_2018 }}</strong> → HW <strong>{{ mae_2019 }}</strong> units &middot; HW wins raw MAE
+                Primary <strong>{{ mae_2018 }}</strong> → Best <strong>{{ mae_2019 }}</strong> units avg error
             </div>
             <div style="font-size:.75rem; background:#d1f2e0; border-radius:6px; padding:.3rem .65rem; color:#0a4022; font-weight:600; margin-top:.6rem; display:inline-block;">
-                <i class="bi bi-check-circle-fill me-1"></i>XGBoost best R² ({{ r2_2018 }})
+                <i class="bi bi-check-circle-fill me-1"></i>Best overall accuracy score ({{ r2_2018 }})
             </div>
         </div>
     </div>
@@ -296,12 +296,12 @@
             </div>
             <div class="metric-badge {% if drugs_stable == total_drugs %}badge-good{% elif drugs_stable > 0 %}badge-warn{% else %}badge-bad{% endif %}">
                 {% if drugs_stable == total_drugs %}<i class="bi bi-check-circle-fill"></i> All Clear
-                {% elif drugs_stable > 0 %}<i class="bi bi-exclamation-circle-fill"></i> Partial Drift
-                {% else %}<i class="bi bi-x-circle-fill"></i> All Degraded{% endif %}
+                {% elif drugs_stable > 0 %}<i class="bi bi-exclamation-circle-fill"></i> Some Need Attention
+                {% else %}<i class="bi bi-x-circle-fill"></i> All Need Review{% endif %}
             </div>
             <div class="metric-hint text-muted">
-                {% if drugs_drifted > 0 %}{{ drugs_drifted }} drug{% if drugs_drifted != 1 %}s{% endif %} accuracy has degraded vs 2018 baseline
-                {% else %}All drugs within acceptable forecast range{% endif %}
+                {% if drugs_drifted > 0 %}{{ drugs_drifted }} drug{% if drugs_drifted != 1 %}s{% endif %} are less accurate than expected
+                {% else %}All drugs are forecasting within the expected range{% endif %}
             </div>
             <div class="kpi-bar-track mt-2">
                 <div class="kpi-bar-fill"
@@ -321,13 +321,13 @@
         <div class="chart-card">
             <div class="chart-card-header">
                 <div>
-                    <h6 class="mb-0 fw-semibold">MAE per Drug — XGBoost vs Holt-Winters vs SARIMA (2025 Test)</h6>
+                    <h6 class="mb-0 fw-semibold">Forecast Error by Drug — 2025 Test</h6>
                     <small class="text-muted">
-                        Lower bars = more accurate. XGBoost (blue) vs Holt-Winters (green) vs SARIMA (red) on 2025 out-of-sample data.
+                        Lower bars = more accurate. Primary (blue) vs Backup (green) vs Third method (red) on 2025 data the system had never seen.
                     </small>
                 </div>
                 <a href="{% url 'forecasting:drift' %}" class="btn btn-sm btn-outline-danger">
-                    <i class="bi bi-arrow-right me-1"></i>Full Drift Report
+                    <i class="bi bi-arrow-right me-1"></i>Accuracy Report
                 </a>
             </div>
             <div class="p-3">
@@ -343,12 +343,12 @@
         <div class="table-card">
             <div class="p-3 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div>
-                    <h6 class="mb-0 fw-semibold">Drug-by-Drug Forecast Performance — 2025 Out-of-Sample Test</h6>
-                    <small class="text-muted">XGBoost vs Holt-Winters (2025) &middot; Lower MAE = better &middot; Click column headers to sort</small>
+                    <h6 class="mb-0 fw-semibold">Drug-by-Drug Forecast Accuracy — 2025</h6>
+                    <small class="text-muted">Lower error = better forecast &middot; Click column headers to sort</small>
                 </div>
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 rounded-pill px-2 py-1">
-                        <i class="bi bi-exclamation-circle me-1"></i>{{ drugs_drifted }} Degraded
+                        <i class="bi bi-exclamation-circle me-1"></i>{{ drugs_drifted }} Needs Review
                     </span>
                     <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 rounded-pill px-2 py-1">
                         <i class="bi bi-check-circle me-1"></i>{{ drugs_stable }} On Track
@@ -376,27 +376,27 @@
                                 Drug <span class="sort-icon bi bi-arrow-down-up"></span>
                             </th>
                             <th class="sortable" onclick="sortDrugTable(1)" data-col="1"
-                                title="XGBoost 2025 Mean Absolute Error — lower is better">
-                                XGBoost MAE <i class="bi bi-info-circle text-muted" style="font-size:.68rem;"></i>
+                                title="Primary method average weekly error in 2025 — lower is better">
+                                Avg Error (Primary) <i class="bi bi-info-circle text-muted" style="font-size:.68rem;"></i>
                                 <span class="sort-icon bi bi-arrow-down-up"></span>
                             </th>
                             <th class="sortable" onclick="sortDrugTable(2)" data-col="2"
-                                title="Holt-Winters 2025 Mean Absolute Error — lower is better">
-                                HW MAE <i class="bi bi-info-circle text-muted" style="font-size:.68rem;"></i>
+                                title="Backup method average weekly error in 2025 — lower is better">
+                                Avg Error (Backup) <i class="bi bi-info-circle text-muted" style="font-size:.68rem;"></i>
                                 <span class="sort-icon bi bi-arrow-down-up"></span>
                             </th>
                             <th class="sortable" onclick="sortDrugTable(3)" data-col="3"
-                                title="XGBoost weighted MAPE on 2025 test data">
-                                WMAPE % <i class="bi bi-info-circle text-muted" style="font-size:.68rem;"></i>
+                                title="Forecast error as a percentage of actual sales">
+                                Error % <i class="bi bi-info-circle text-muted" style="font-size:.68rem;"></i>
                                 <span class="sort-icon bi bi-arrow-down-up"></span>
                             </th>
                             <th class="sortable" onclick="sortDrugTable(4)" data-col="4"
-                                title="XGBoost R² in 2025 — 1.0 = perfect, negative = worse than predicting the mean">
-                                XGB R² <i class="bi bi-info-circle text-muted" style="font-size:.68rem;"></i>
+                                title="Accuracy score in 2025 — 1.0 = perfect, negative = worse than a simple average">
+                                Accuracy Score <i class="bi bi-info-circle text-muted" style="font-size:.68rem;"></i>
                                 <span class="sort-icon bi bi-arrow-down-up"></span>
                             </th>
                             <th class="sortable" onclick="sortDrugTable(5)" data-col="5">
-                                HW vs XGB <span class="sort-icon bi bi-arrow-down-up"></span>
+                                Error Difference <span class="sort-icon bi bi-arrow-down-up"></span>
                             </th>
                             <th>Status</th>
                             <th></th>
@@ -423,7 +423,7 @@
                                     {{ row.R2_2019 }}
                                 </span>
                                 {% if row.R2_2019 < 0 %}
-                                <span class="badge bg-danger bg-opacity-10 text-danger" style="font-size:.62rem; padding:.1rem .35rem; vertical-align:middle;">below baseline</span>
+                                <span class="badge bg-danger bg-opacity-10 text-danger" style="font-size:.62rem; padding:.1rem .35rem; vertical-align:middle;">below expected</span>
                                 {% endif %}
                             </td>
                             <td>
@@ -445,7 +445,7 @@
                                     {% if row.MAE_2019 > 20 %}
                                         <span class="pill-critical"><i class="bi bi-x-circle-fill"></i> Critical</span>
                                     {% else %}
-                                        <span class="pill-degraded"><i class="bi bi-exclamation-circle-fill"></i> Degraded</span>
+                                        <span class="pill-degraded"><i class="bi bi-exclamation-circle-fill"></i> Needs Review</span>
                                     {% endif %}
                                 {% else %}
                                     <span class="pill-stable"><i class="bi bi-check-circle-fill"></i> On Track</span>
@@ -496,7 +496,7 @@ document.querySelectorAll('.kpi-bar-fill[data-width]').forEach(function(el) {
 
     const trace1 = {
         type: 'bar',
-        name: 'XGBoost (2025)',
+        name: 'Primary Method (2025)',
         x: drugs, y: mae18,
         marker: { color: '#0d6efd', opacity: .85 },
         text: mae18.map(v => v.toFixed(2)),
@@ -505,7 +505,7 @@ document.querySelectorAll('.kpi-bar-fill[data-width]').forEach(function(el) {
     };
     const trace2 = {
         type: 'bar',
-        name: 'Holt-Winters (2025)',
+        name: 'Backup Method (2025)',
         x: drugs, y: mae19,
         marker: { color: '#198754', opacity: .85 },
         text: mae19.map(v => v.toFixed(2)),
@@ -514,7 +514,7 @@ document.querySelectorAll('.kpi-bar-fill[data-width]').forEach(function(el) {
     };
     const trace3 = {
         type: 'bar',
-        name: 'SARIMA (2025)',
+        name: 'Third Method (2025)',
         x: drugs, y: sarMae,
         marker: { color: '#dc3545', opacity: .85 },
         text: sarMae.map(v => v.toFixed(2)),
@@ -525,7 +525,7 @@ document.querySelectorAll('.kpi-bar-fill[data-width]').forEach(function(el) {
     Plotly.newPlot('mae-chart', [trace1, trace2, trace3], {
         barmode: 'group',
         xaxis: { title: { text: 'Drug (ATC Code)', standoff: 8 }, tickangle: 0 },
-        yaxis: { title: { text: 'Mean Absolute Error (units)', standoff: 8 }, zeroline: true, rangemode: 'tozero' },
+        yaxis: { title: { text: 'Average Weekly Error (units)', standoff: 8 }, zeroline: true, rangemode: 'tozero' },
         legend: { orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1 },
         margin: { l: 55, r: 30, t: 50, b: 55 },
         plot_bgcolor:  'rgba(0,0,0,0)',

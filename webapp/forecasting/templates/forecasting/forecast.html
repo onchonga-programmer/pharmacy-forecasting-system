@@ -10,7 +10,7 @@
 <div class="d-flex align-items-center justify-content-between mb-3">
     <div>
         <h4 class="mb-0 fw-bold">Live Forecast</h4>
-        <small class="text-muted">Get a predicted sales quantity for any drug and week — powered by the trained forecasting model</small>
+        <small class="text-muted">Get a predicted sales quantity for any drug and week &mdash; powered by the forecasting system</small>
     </div>
 </div>
 
@@ -36,7 +36,7 @@
                         <option value="{{ drug }}"
                             {% if form_data.drug_name == drug %}selected{% endif %}>
                             {{ drug }} — {{ drug_descriptions|default_if_none:"" }}
-                            {% if drug == "N02BE" %}⚠ High Drift{% endif %}
+                            {% if drug == "N02BE" %}⚠ Use With Caution{% endif %}
                         </option>
                         {% endfor %}
                     </select>
@@ -174,19 +174,19 @@
             <div class="row text-center g-0">
                 <div class="col border-end py-2">
                     <div class="fw-semibold text-success">{{ result.mae_2018 }} units</div>
-                    <div class="text-muted" style="font-size:.72rem;">Avg error in 2018</div>
+                    <div class="text-muted" style="font-size:.72rem;">Typical weekly error</div>
                 </div>
                 <div class="col border-end py-2">
-                    <div class="fw-semibold text-primary">XGBoost</div>
-                    <div class="text-muted" style="font-size:.72rem;">Forecasting method</div>
+                    <div class="fw-semibold text-primary">Automated</div>
+                    <div class="text-muted" style="font-size:.72rem;">Forecasting system</div>
                 </div>
                 <div class="col border-end py-2">
-                    <div class="fw-semibold">2014–2017</div>
+                    <div class="fw-semibold">2014–2024</div>
                     <div class="text-muted" style="font-size:.72rem;">Learned from</div>
                 </div>
                 <div class="col py-2">
-                    <div class="fw-semibold text-success">99%</div>
-                    <div class="text-muted" style="font-size:.72rem;">Accuracy in 2018</div>
+                    <div class="fw-semibold text-success">High</div>
+                    <div class="text-muted" style="font-size:.72rem;">Confidence level</div>
                 </div>
             </div>
         </div>
@@ -223,7 +223,7 @@
                             <td>
                                 <strong>{{ r.drug }}</strong>
                                 {% if r.drug == "N02BE" %}
-                                <span class="badge bg-warning text-dark ms-1" style="font-size:.6rem;">⚠ High Drift</span>
+                                <span class="badge bg-warning text-dark ms-1" style="font-size:.6rem;">⚠ Use With Caution</span>
                                 {% endif %}
                             </td>
                             <td class="text-muted small">{{ r.date }}</td>
@@ -254,7 +254,7 @@
                     <i class="bi bi-graph-up me-1"></i>View Past Results
                 </a>
                 <a href="{% url 'forecasting:drift' %}" class="btn btn-outline-warning btn-sm">
-                    <i class="bi bi-exclamation-triangle me-1"></i>Drift Analysis
+                    <i class="bi bi-exclamation-triangle me-1"></i>Accuracy Monitor
                 </a>
             </div>
         </div>
