@@ -57,10 +57,10 @@
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Drug (ATC Code)</label>
                     <select name="drug_name" class="form-select" required>
-                        {% for drug in drug_list %}
-                        <option value="{{ drug }}"
-                            {% if form_data.drug_name == drug %}selected{% endif %}>
-                            {{ drug }} — {{ drug_descriptions|default_if_none:"" }}
+                        {% for code, desc in drug_options %}
+                        <option value="{{ code }}"
+                            {% if form_data.drug_name == code %}selected{% endif %}>
+                            {{ code }} — {{ desc }}
                         </option>
                         {% endfor %}
                     </select>
@@ -102,7 +102,7 @@
                 </div>
 
                 <hr class="my-3">
-                <p class="text-muted small mb-2"><i class="bi bi-calculator me-1"></i>EOQ parameters (optional — used to calculate optimal order size)</p>
+                <p class="text-muted small mb-2"><i class="bi bi-calculator me-1"></i>Order Cost Settings (optional — used to calculate optimal order size)</p>
 
                 <div class="row g-2 mb-3">
                     <div class="col-6">
@@ -120,7 +120,7 @@
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label fw-semibold small">Annual Holding Cost (% of unit cost)</label>
+                    <label class="form-label fw-semibold small">Yearly Storage Cost (%)</label>
                     <div class="input-group input-group-sm">
                         <input type="number" name="holding_cost_pct" class="form-control"
                                min="1" max="100" step="1"
@@ -167,31 +167,27 @@
         <!-- Key metric cards -->
         <div class="row g-2 mb-3">
             <div class="col-6 col-xl-3">
-                <div class="inv-metric-card h-100" style="background:#e9f7ef;">
-                    <div class="inv-value text-success">{{ result.safety_stock }}</div>
-                    <div class="inv-label text-success">Safety Stock</div>
-                    <div class="inv-formula">Z×σ×√L = {{ result.z_score }}×{{ result.std_weekly_demand }}×√{{ result.lead_time_weeks }}</div>
+                <div class="inv-metric-card h-100" style="background:#eff6ff;">
+                    <div class="inv-value" style="color:#0284c7;">{{ result.safety_stock }}</div>
+                    <div class="inv-label" style="color:#0284c7;">Minimum Buffer Stock</div>
                 </div>
             </div>
             <div class="col-6 col-xl-3">
-                <div class="inv-metric-card h-100" style="background:#fff3cd;">
-                    <div class="inv-value text-warning">{{ result.reorder_point }}</div>
-                    <div class="inv-label text-warning">Reorder Point</div>
-                    <div class="inv-formula">μ×L + SS = {{ result.demand_during_lt }} + {{ result.safety_stock }}</div>
+                <div class="inv-metric-card h-100" style="background:#eff6ff;">
+                    <div class="inv-value" style="color:#0284c7;">{{ result.reorder_point }}</div>
+                    <div class="inv-label" style="color:#0284c7;">Order When Stock Reaches</div>
                 </div>
             </div>
             <div class="col-6 col-xl-3">
-                <div class="inv-metric-card h-100" style="background:#e8f0fe;">
-                    <div class="inv-value text-primary">{% if result.eoq %}{{ result.eoq|floatformat:0 }}{% else %}—{% endif %}</div>
-                    <div class="inv-label text-primary">EOQ (units)</div>
-                    <div class="inv-formula">√(2DS/H)</div>
+                <div class="inv-metric-card h-100" style="background:#eff6ff;">
+                    <div class="inv-value" style="color:#0284c7;">{% if result.eoq %}{{ result.eoq|floatformat:0 }}{% else %}—{% endif %}</div>
+                    <div class="inv-label" style="color:#0284c7;">Recommended Order Size</div>
                 </div>
             </div>
             <div class="col-6 col-xl-3">
-                <div class="inv-metric-card h-100" style="background:#fce8ff;">
-                    <div class="inv-value" style="color:#9c27b0;">{{ result.weeks_of_coverage }}w</div>
-                    <div class="inv-label" style="color:#9c27b0;">Weeks of Cover</div>
-                    <div class="inv-formula">stock ÷ avg weekly</div>
+                <div class="inv-metric-card h-100" style="background:#eff6ff;">
+                    <div class="inv-value" style="color:#0284c7;">{{ result.weeks_of_coverage }}w</div>
+                    <div class="inv-label" style="color:#0284c7;">Stock Lasts (weeks)</div>
                 </div>
             </div>
         </div>
@@ -205,24 +201,24 @@
 
             <div class="gauge-bar mb-4">
                 <!-- Safety stock marker -->
-                <div class="gauge-marker" style="left:{{ result.ss_pct }}%;">
-                    <span class="gauge-marker-label" style="left:{{ result.ss_pct }}%;">
+                <div class="gauge-marker" data-left="{{ result.ss_pct|default:0 }}">
+                    <span class="gauge-marker-label" data-left="{{ result.ss_pct|default:0 }}">
                         SS={{ result.safety_stock }}
                     </span>
                 </div>
                 <!-- Reorder point marker -->
-                <div class="gauge-marker" style="left:{{ result.rop_pct }}%; background:#fd7e14;">
-                    <span class="gauge-marker-label" style="left:{{ result.rop_pct }}%; color:#fd7e14;">
+                <div class="gauge-marker gauge-rop-marker" data-left="{{ result.rop_pct|default:0 }}">
+                    <span class="gauge-marker-label gauge-rop-label" data-left="{{ result.rop_pct|default:0 }}">
                         ROP={{ result.reorder_point }}
                     </span>
                 </div>
                 <!-- Fill -->
-                <div class="gauge-fill bg-{{ result.status_colour }}" style="width:{{ result.stock_pct }}%;"></div>
+                <div class="gauge-fill bg-{{ result.status_colour }}" data-width="{{ result.stock_pct|default:0 }}"></div>
             </div>
 
             <div class="d-flex gap-3 flex-wrap" style="font-size:.78rem;">
-                <span><span class="badge bg-secondary me-1">&nbsp;</span> Safety Stock ({{ result.safety_stock }} units)</span>
-                <span><span class="me-1" style="color:#fd7e14;">■</span> Reorder Point ({{ result.reorder_point }} units)</span>
+                <span><span class="badge bg-secondary me-1">&nbsp;</span> Minimum Buffer Stock ({{ result.safety_stock }} units)</span>
+                <span><span class="me-1" style="color:#fd7e14;">■</span> Order When Stock Reaches ({{ result.reorder_point }} units)</span>
                 <span><span class="badge bg-{{ result.status_colour }} me-1">&nbsp;</span> Current Stock ({{ result.current_stock|floatformat:0 }} units)</span>
             </div>
         </div>
@@ -318,12 +314,12 @@
             </button>
             <div class="collapse mt-3" id="formulaRef">
                 <div class="formula-box mb-2">
-                    <strong>Safety Stock (SS)</strong><br>
+                    <strong>Minimum Buffer Stock (SS)</strong><br>
                     SS = Z × σ_demand × √(lead_time)<br>
                     <span class="text-muted">Z = {{ result.z_score }} ({{ result.service_level_pct|floatformat:0 }}% service level)  |  σ = {{ result.std_weekly_demand }} units/week  |  L = {{ result.lead_time_weeks }} weeks</span>
                 </div>
                 <div class="formula-box mb-2">
-                    <strong>Reorder Point (ROP)</strong><br>
+                    <strong>Order When Stock Reaches (ROP)</strong><br>
                     ROP = μ_demand × lead_time + SS<br>
                     <span class="text-muted">= {{ result.avg_weekly_demand }} × {{ result.lead_time_weeks }} + {{ result.safety_stock }} = {{ result.reorder_point }} units</span>
                 </div>
@@ -350,10 +346,10 @@
             <div class="p-3 rounded text-start w-100" style="background:#f8f9fa; max-width:380px; font-size:.8rem;">
                 <div class="fw-semibold mb-1 text-secondary"><i class="bi bi-info-circle me-1"></i>What this page calculates:</div>
                 <ul class="mb-0 text-muted ps-3">
-                    <li><strong>Safety Stock</strong> — buffer against demand variability</li>
-                    <li><strong>Reorder Point</strong> — when to place the next order</li>
-                    <li><strong>EOQ</strong> — most cost-effective order quantity</li>
-                    <li><strong>Weeks of Coverage</strong> — how long stock will last</li>
+                    <li><strong>Minimum Buffer Stock</strong> — buffer against demand variability</li>
+                    <li><strong>Order When Stock Reaches</strong> — when to place the next order</li>
+                    <li><strong>Recommended Order Size</strong> — most cost-effective order quantity</li>
+                    <li><strong>Stock Lasts (weeks)</strong> — how long stock will last</li>
                 </ul>
             </div>
         </div>
@@ -361,4 +357,29 @@
 
     </div><!-- /col -->
 </div><!-- /row -->
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    // Apply left % to gauge markers and their labels
+    document.querySelectorAll('.gauge-marker[data-left]').forEach(function (el) {
+        el.style.left = (el.getAttribute('data-left') || '0') + '%';
+    });
+    document.querySelectorAll('.gauge-marker-label[data-left]').forEach(function (el) {
+        el.style.left = (el.getAttribute('data-left') || '0') + '%';
+    });
+    // Reorder-point marker and label styled in orange
+    document.querySelectorAll('.gauge-rop-marker').forEach(function (el) {
+        el.style.background = '#fd7e14';
+    });
+    document.querySelectorAll('.gauge-rop-label').forEach(function (el) {
+        el.style.color = '#fd7e14';
+    });
+    // Apply width % to the gauge fill bar
+    document.querySelectorAll('.gauge-fill[data-width]').forEach(function (el) {
+        el.style.width = (el.getAttribute('data-width') || '0') + '%';
+    });
+})();
+</script>
 {% endblock %}

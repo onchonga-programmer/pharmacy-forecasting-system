@@ -418,6 +418,7 @@ def inventory(request):
         "form_data":         form_data,
         "drug_list":         ml_engine.DRUG_LIST,
         "drug_descriptions": ml_engine.DRUG_DESCRIPTIONS,
+        "drug_options":      [(code, ml_engine.DRUG_DESCRIPTIONS.get(code, code)) for code in ml_engine.DRUG_LIST],
         "page":              "inventory",
     }
     return render(request, "forecasting/inventory.html", context)
