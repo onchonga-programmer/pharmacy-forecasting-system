@@ -207,7 +207,7 @@
         </p>
         <div class="d-flex flex-wrap mb-2" style="gap:.3rem;">
             {% for row in comparison %}{% if 'Degraded' in row.Status %}
-            <span class="alert-drug-chip"><i class="bi bi-capsule-pill"></i>{{ row.Drug }}</span>
+            <span class="alert-drug-chip"><i class="bi bi-capsule-pill"></i>{{ row.Drug }}{% if row.Drug == 'M01AB' %} — Anti-inflammatories{% elif row.Drug == 'M01AE' %} — Anti-inflammatories{% elif row.Drug == 'N02BA' %} — Aspirin{% elif row.Drug == 'N02BE' %} — Paracetamol{% elif row.Drug == 'N05B' %} — Anxiety{% elif row.Drug == 'N05C' %} — Sleep aids{% elif row.Drug == 'R03' %} — Asthma{% elif row.Drug == 'R06' %} — Allergy{% endif %}</span>
             {% endif %}{% endfor %}
         </div>
         <div class="d-flex gap-2 flex-wrap mt-1">
@@ -233,52 +233,56 @@
 <!-- ── KPI Cards ──────────────────────────────────────────────────────────── -->
 <div class="row g-3 mb-4">
 
-    <!-- XGBoost 2025 -->
+    <!-- Forecast Error KPI -->
     <div class="col-sm-6 col-xl-3">
         <div class="metric-card h-100" style="background:#e8f0fe;">
             <div class="status-strip" style="background:#0d6efd;"></div>
             <div class="metric-value text-primary">{{ mae_2018 }}<small class="fs-6 fw-normal"> units</small></div>
-            <div class="metric-label text-primary">Average Forecast Error — 2025</div>
+            <div class="metric-label text-primary">Avg Forecast Error &mdash; 2025</div>
             <div class="metric-badge badge-good"><i class="bi bi-graph-up-arrow"></i> Forecasting System</div>
-            <div class="metric-hint text-muted">{{ mape_2018 }}% avg error &middot; Accuracy&nbsp;=&nbsp;{{ r2_2018 }}/1.0</div>
+            <div class="metric-hint text-muted">On average, the forecast was off by <strong>{{ mae_2018 }} units</strong> per week in 2025</div>
             {% widthratio r2_2018 1 100 as r2_2018_pct %}
-            <div class="kpi-bar-track" title="R² accuracy score">
+            <div class="kpi-bar-track mt-2" data-bs-toggle="tooltip" data-bs-title="Forecast reliability: forecasts correctly tracked {{ r2_2018_pct }}% of demand changes">
                 <div class="kpi-bar-fill" style="background:#198754;" data-width="{{ r2_2018_pct|default:'0' }}"></div>
             </div>
-            <div style="font-size:.68rem; color:#888; margin-top:.25rem;">Accuracy score — {{ r2_2018 }}/1.0</div>
+            <div style="font-size:.68rem; color:#888; margin-top:.25rem;">Correctly tracked {{ r2_2018_pct }}% of demand changes</div>
         </div>
     </div>
 
-    <!-- Holt-Winters 2025 -->
+    <!-- Backup System KPI -->
     <div class="col-sm-6 col-xl-3">
         <div class="metric-card h-100" style="background:#e9f7ef;">
             <div class="status-strip" style="background:#198754;"></div>
             <div class="metric-value text-success">{{ mae_2019 }}<small class="fs-6 fw-normal"> units</small></div>
-            <div class="metric-label text-success">Best Average Error — 2025</div>
-            <div class="metric-badge badge-good"><i class="bi bi-graph-up-arrow"></i> Lowest Error Achieved</div>
-            <div class="metric-hint text-muted">{{ mape_2019 }}% avg error &middot; Accuracy&nbsp;=&nbsp;{{ r2_2019 }}/1.0</div>
+            <div class="metric-label text-success">Backup System Error &mdash; 2025</div>
+            <div class="metric-badge badge-good"
+                 data-bs-toggle="tooltip"
+                 data-bs-title="The backup system is used automatically for drugs with irregular demand. No action needed from you.">
+                <i class="bi bi-shield-check"></i> Auto-selected when needed
+            </div>
+            <div class="metric-hint text-muted">Backup system off by <strong>{{ mae_2019 }} units/week</strong> on average</div>
             <div class="kpi-bar-track mt-2">
                 <div class="kpi-bar-fill" style="background:#198754; width:100%;"></div>
             </div>
-            <div style="font-size:.68rem; color:#888; margin-top:.25rem;">{{ pct_change }}% vs primary method on avg error</div>
+            <div style="font-size:.68rem; color:#888; margin-top:.25rem;">The system selects between methods automatically</div>
         </div>
     </div>
 
-    <!-- HW vs XGBoost comparison -->
+    <!-- Acceptable Error Limit KPI -->
     <div class="col-sm-6 col-xl-3">
         <div class="metric-card h-100" style="background:#fffbf0;">
             <div class="status-strip" style="background:#fd7e14;"></div>
             <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-bar-chart-fill text-warning" style="font-size:1.4rem;"></i>
-                <div class="metric-value text-warning">{{ pct_change }}%</div>
+                <i class="bi bi-rulers text-warning" style="font-size:1.4rem;"></i>
+                <div class="metric-value text-warning">{{ mae_threshold }}<small class="fs-6 fw-normal"> units</small></div>
             </div>
-            <div class="metric-label text-warning">Error Difference — 2025</div>
-            <div class="metric-badge badge-warn"><i class="bi bi-arrow-left-right"></i> 2025 Accuracy Review</div>
+            <div class="metric-label text-warning">Acceptable Error Limit</div>
+            <div class="metric-badge badge-warn"><i class="bi bi-check2-circle"></i> Planning threshold</div>
             <div class="metric-hint" style="color:#7d5a00;">
-                Primary <strong>{{ mae_2018 }}</strong> → Best <strong>{{ mae_2019 }}</strong> units avg error
+                Forecasts within <strong>{{ mae_threshold }} units/week</strong> are considered accurate for ordering decisions
             </div>
             <div style="font-size:.75rem; background:#d1f2e0; border-radius:6px; padding:.3rem .65rem; color:#0a4022; font-weight:600; margin-top:.6rem; display:inline-block;">
-                <i class="bi bi-check-circle-fill me-1"></i>Best overall accuracy score ({{ r2_2018 }})
+                <i class="bi bi-check-circle-fill me-1"></i>Current error ({{ mae_2018 }}) is within limit
             </div>
         </div>
     </div>
@@ -286,7 +290,8 @@
     <!-- Drugs On Target -->
     {% widthratio drugs_stable total_drugs 100 as pct_stable %}
     <div class="col-sm-6 col-xl-3">
-        <div class="metric-card h-100 {% if drugs_stable == total_drugs %}metric-ontarget-good{% elif drugs_stable > 0 %}metric-ontarget-warn{% else %}metric-ontarget-bad{% endif %}">
+        <a href="{% url 'forecasting:drift' %}" class="text-decoration-none">
+        <div class="metric-card h-100 {% if drugs_stable == total_drugs %}metric-ontarget-good{% elif drugs_stable > 0 %}metric-ontarget-warn{% else %}metric-ontarget-bad{% endif %}" style="cursor:pointer;">
             <div class="status-strip {% if drugs_stable == total_drugs %}strip-good{% elif drugs_stable > 0 %}strip-warn{% else %}strip-bad{% endif %}"></div>
             <div class="metric-value {% if drugs_stable == total_drugs %}text-ontarget-good{% elif drugs_stable > 0 %}text-ontarget-warn{% else %}text-ontarget-bad{% endif %}">
                 {{ drugs_stable }}<small class="fs-6 fw-normal">/{{ total_drugs }}</small>
@@ -296,11 +301,11 @@
             </div>
             <div class="metric-badge {% if drugs_stable == total_drugs %}badge-good{% elif drugs_stable > 0 %}badge-warn{% else %}badge-bad{% endif %}">
                 {% if drugs_stable == total_drugs %}<i class="bi bi-check-circle-fill"></i> All Clear
-                {% elif drugs_stable > 0 %}<i class="bi bi-exclamation-circle-fill"></i> Some Need Attention
+                {% elif drugs_stable > 0 %}<i class="bi bi-exclamation-circle-fill"></i> {{ drugs_drifted }} Need{% if drugs_drifted == 1 %}s{% endif %} Attention
                 {% else %}<i class="bi bi-x-circle-fill"></i> All Need Review{% endif %}
             </div>
             <div class="metric-hint text-muted">
-                {% if drugs_drifted > 0 %}{{ drugs_drifted }} drug{% if drugs_drifted != 1 %}s{% endif %} are less accurate than expected
+                {% if drugs_drifted > 0 %}Tap to see which {{ drugs_drifted }} drug{% if drugs_drifted != 1 %}s{% endif %} need attention
                 {% else %}All drugs are forecasting within the expected range{% endif %}
             </div>
             <div class="kpi-bar-track mt-2">
@@ -309,8 +314,9 @@
                      data-width="{{ pct_stable|default:'4' }}"
                      style="min-width:4px;"></div>
             </div>
-            <div style="font-size:.68rem; color:#888; margin-top:.25rem;">{{ pct_stable }}% on-target rate</div>
+            <div style="font-size:.68rem; color:#888; margin-top:.25rem;">{{ pct_stable }}% on-target rate → View report</div>
         </div>
+        </a>
     </div>
 
 </div>
@@ -321,9 +327,10 @@
         <div class="chart-card">
             <div class="chart-card-header">
                 <div>
-                    <h6 class="mb-0 fw-semibold">Forecast Error by Drug — 2025 Test</h6>
+                    <h6 class="mb-0 fw-semibold">Forecast Error by Drug &mdash; 2025 Test</h6>
                     <small class="text-muted">
-                        Lower bars = more accurate. Primary (blue) vs Backup (green) on 2025 data the system had never seen.
+                        Lower bars = more accurate &middot; Red dashed line = acceptable limit ({{ mae_threshold }} units) &middot;
+                        <span data-bs-toggle="tooltip" data-bs-title="The backup system is used automatically for some drugs — no action needed from you." style="cursor:help; text-decoration:underline dotted;">Blue = main system, Green = backup system</span>
                     </small>
                 </div>
                 <a href="{% url 'forecasting:drift' %}" class="btn btn-sm btn-outline-danger">
@@ -343,26 +350,29 @@
         <div class="table-card">
             <div class="p-3 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div>
-                    <h6 class="mb-0 fw-semibold">Drug-by-Drug Forecast Accuracy — 2025</h6>
-                    <small class="text-muted">Lower error = better forecast &middot; Click column headers to sort</small>
+                    <h6 class="mb-0 fw-semibold">Drug-by-Drug Forecast Accuracy &mdash; 2025</h6>
+                    <small class="text-muted">Flagged drugs shown first &middot; Click column headers to sort</small>
                 </div>
                 <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 rounded-pill px-2 py-1">
+                    <a href="{% url 'forecasting:drift' %}" class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 rounded-pill px-2 py-1 text-decoration-none">
                         <i class="bi bi-exclamation-circle me-1"></i>{{ drugs_drifted }} Needs Review
-                    </span>
+                    </a>
                     <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 rounded-pill px-2 py-1">
                         <i class="bi bi-check-circle me-1"></i>{{ drugs_stable }} On Track
                     </span>
+                    <button id="adv-toggle-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleAdvanced()" data-showing="0">
+                        <i class="bi bi-eye me-1"></i>Show advanced data
+                    </button>
                 </div>
             </div>
 
             <!-- Search + filter bar -->
             <div class="table-search-bar">
                 <i class="bi bi-search text-muted" style="font-size:.9rem;"></i>
-                <input type="text" id="drug-search" placeholder="Search drug code…" oninput="filterDrugTable()">
+                <input type="text" id="drug-search" placeholder="Search drug name…" oninput="filterDrugTable()">
                 <select id="status-filter" onchange="filterDrugTable()">
-                    <option value="all">All statuses</option>
-                    <option value="degraded">⚠ Degraded only</option>
+                    <option value="all">All drugs</option>
+                    <option value="degraded">⚠ Needs Review only</option>
                     <option value="stable">✓ On Track only</option>
                 </select>
                 <span id="filter-count" class="text-muted" style="font-size:.8rem; margin-left:.25rem;"></span>
@@ -372,77 +382,98 @@
                 <table class="table table-hover align-middle mb-0" id="drug-table">
                     <thead>
                         <tr>
-                            <th class="sortable" onclick="sortDrugTable(0)" data-col="0" style="min-width:90px;">
+                            <th class="sortable" onclick="sortDrugTable(0)" data-col="0" style="min-width:150px;">
                                 Drug <span class="sort-icon bi bi-arrow-down-up"></span>
                             </th>
-                            <th class="sortable" onclick="sortDrugTable(1)" data-col="1"
-                                title="Primary method average weekly error in 2025 — lower is better">
-                                Avg Error (Primary) <i class="bi bi-info-circle text-muted" style="font-size:.68rem;"></i>
-                                <span class="sort-icon bi bi-arrow-down-up"></span>
-                            </th>
+                            <th style="min-width:110px;">What It Treats</th>
                             <th class="sortable" onclick="sortDrugTable(2)" data-col="2"
-                                title="Backup method average weekly error in 2025 — lower is better">
-                                Avg Error (Backup) <i class="bi bi-info-circle text-muted" style="font-size:.68rem;"></i>
+                                title="On average, the forecast was off by this many units per week — lower is better">
+                                Avg Weekly Error <i class="bi bi-info-circle text-muted" style="font-size:.68rem;"></i>
                                 <span class="sort-icon bi bi-arrow-down-up"></span>
                             </th>
-                            <th class="sortable" onclick="sortDrugTable(3)" data-col="3"
-                                title="Forecast error as a percentage of actual sales">
-                                Error % <i class="bi bi-info-circle text-muted" style="font-size:.68rem;"></i>
-                                <span class="sort-icon bi bi-arrow-down-up"></span>
+                            <th class="adv-col d-none"
+                                title="Backup system average weekly error — used automatically when demand is irregular">
+                                Backup System Error
+                                <i class="bi bi-info-circle text-muted" style="font-size:.68rem;"
+                                   data-bs-toggle="tooltip"
+                                   data-bs-title="The backup system is used automatically for some drugs — no action needed."></i>
                             </th>
-                            <th class="sortable" onclick="sortDrugTable(4)" data-col="4"
-                                title="Accuracy score in 2025 — 1.0 = perfect, negative = worse than a simple average">
-                                Accuracy Score <i class="bi bi-info-circle text-muted" style="font-size:.68rem;"></i>
-                                <span class="sort-icon bi bi-arrow-down-up"></span>
+                            <th class="adv-col d-none">Error % of Sales</th>
+                            <th class="adv-col d-none"
+                                title="How well the forecast tracked demand changes — higher is better">
+                                Reliability Score <i class="bi bi-info-circle text-muted" style="font-size:.68rem;"></i>
                             </th>
-                            <th class="sortable" onclick="sortDrugTable(5)" data-col="5">
-                                Error Difference <span class="sort-icon bi bi-arrow-down-up"></span>
-                            </th>
+                            <th class="adv-col d-none">Error Change vs Backup</th>
                             <th>Status</th>
-                            <th></th>
+                            <th>Next Step</th>
                         </tr>
                     </thead>
                     <tbody id="drug-tbody">
                         {% for row in comparison %}
-                        <tr class="{% if 'Degraded' in row.Status %}{% if row.MAE_2019 > 20 %}row-critical{% else %}row-degraded{% endif %}{% else %}row-stable{% endif %}"
-                            data-status="{% if 'Degraded' in row.Status %}degraded{% else %}stable{% endif %}">
-                            <td><strong>{{ row.Drug }}</strong></td>
-                            <td><span class="text-success fw-semibold">{{ row.MAE_2018 }}</span></td>
+                        <tr class="{% if 'Degraded' in row.Status %}{% if row.MAE_2018 > 20 %}row-critical{% else %}row-degraded{% endif %}{% else %}row-stable{% endif %}"
+                            data-status="{% if 'Degraded' in row.Status %}degraded{% else %}stable{% endif %}"
+                            data-urgency="{% if 'Degraded' in row.Status %}1{% else %}2{% endif %}">
                             <td>
-                                <span class="{% if row.MAE_2019 > 20 %}acc-bad{% elif row.MAE_2019 > 10 %}acc-warn{% else %}acc-good{% endif %}">
-                                    {{ row.MAE_2019 }}
-                                </span>
+                                <strong>{{ row.Drug }}</strong>
+                                <div class="text-muted" style="font-size:.74rem;">
+                                    {% if row.Drug == "M01AB" %}Anti-inflammatories
+                                    {% elif row.Drug == "M01AE" %}Anti-inflammatories (Ibuprofen)
+                                    {% elif row.Drug == "N02BA" %}Pain relief &mdash; Aspirin
+                                    {% elif row.Drug == "N02BE" %}Pain relief &mdash; Paracetamol
+                                    {% elif row.Drug == "N05B" %}Anxiety relief
+                                    {% elif row.Drug == "N05C" %}Sleep aids
+                                    {% elif row.Drug == "R03" %}Asthma &amp; breathing
+                                    {% elif row.Drug == "R06" %}Allergy relief{% endif %}
+                                </div>
+                            </td>
+                            <td class="text-muted small">
+                                {% if row.Drug == "M01AB" %}Pain &amp; swelling
+                                {% elif row.Drug == "M01AE" %}Pain &amp; swelling
+                                {% elif row.Drug == "N02BA" %}Pain relief (Aspirin)
+                                {% elif row.Drug == "N02BE" %}Pain relief (Paracetamol)
+                                {% elif row.Drug == "N05B" %}Anxiety
+                                {% elif row.Drug == "N05C" %}Sleep &amp; sedatives
+                                {% elif row.Drug == "R03" %}Breathing / Asthma
+                                {% elif row.Drug == "R06" %}Allergy relief{% endif %}
                             </td>
                             <td>
+                                <span class="{% if row.MAE_2018 > mae_threshold %}acc-bad{% elif row.MAE_2018 > mae_threshold|add:'-5' %}acc-warn{% else %}acc-good{% endif %} fw-semibold">
+                                    off by {{ row.MAE_2018 }} units/week
+                                </span>
+                            </td>
+                            <td class="adv-col d-none">
+                                <span class="{% if row.MAE_2019 > mae_threshold %}acc-bad{% elif row.MAE_2019 > 10 %}acc-warn{% else %}acc-good{% endif %}">
+                                    {{ row.MAE_2019 }} units
+                                </span>
+                            </td>
+                            <td class="adv-col d-none">
                                 <span class="{% if row.MAPE_2019 > 40 %}acc-bad{% elif row.MAPE_2019 > 25 %}acc-warn{% else %}text-body{% endif %}">
                                     {{ row.MAPE_2019 }}%
                                 </span>
                             </td>
-                            <td>
-                                <span class="{% if row.R2_2019 < 0 %}acc-bad{% elif row.R2_2019 < 0.6 %}acc-warn{% else %}acc-good{% endif %}">
-                                    {{ row.R2_2019 }}
-                                </span>
-                                {% if row.R2_2019 < 0 %}
-                                <span class="badge bg-danger bg-opacity-10 text-danger" style="font-size:.62rem; padding:.1rem .35rem; vertical-align:middle;">below expected</span>
+                            <td class="adv-col d-none">
+                                {% if row.R2_2019 >= 0.8 %}
+                                <span class="acc-good">&#x2605;&#x2605;&#x2605;&#x2605; Strong</span>
+                                {% elif row.R2_2019 >= 0.5 %}
+                                <span class="acc-warn">&#x2605;&#x2605;&#x2605; Moderate</span>
+                                {% elif row.R2_2019 >= 0 %}
+                                <span class="acc-warn">&#x2605;&#x2605; Weak</span>
+                                {% else %}
+                                <span class="acc-bad">&#x2605; Poor</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td class="adv-col d-none">
                                 {% if row.Change_Percent > 999 %}
-                                    <span class="text-danger fw-semibold"><i class="bi bi-arrow-up"></i> Huge ↑</span>
-                                    <div style="font-size:.68rem; color:#aaa;">(near-zero in 2018)</div>
+                                    <span class="text-danger fw-semibold"><i class="bi bi-arrow-up"></i> Much worse</span>
                                 {% elif row.Change_Percent > 0 %}
-                                    <span class="text-danger fw-semibold">
-                                        <i class="bi bi-arrow-up-short"></i>+{{ row.Change_Percent|floatformat:1 }}%
-                                    </span>
+                                    <span class="text-danger fw-semibold"><i class="bi bi-arrow-up-short"></i>+{{ row.Change_Percent|floatformat:1 }}%</span>
                                 {% else %}
-                                    <span class="text-success fw-semibold">
-                                        <i class="bi bi-arrow-down-short"></i>{{ row.Change_Percent|floatformat:1 }}%
-                                    </span>
+                                    <span class="text-success fw-semibold"><i class="bi bi-arrow-down-short"></i>{{ row.Change_Percent|floatformat:1 }}%</span>
                                 {% endif %}
                             </td>
                             <td>
                                 {% if 'Degraded' in row.Status %}
-                                    {% if row.MAE_2019 > 20 %}
+                                    {% if row.MAE_2018 > 20 %}
                                         <span class="pill-critical"><i class="bi bi-x-circle-fill"></i> Critical</span>
                                     {% else %}
                                         <span class="pill-degraded"><i class="bi bi-exclamation-circle-fill"></i> Needs Review</span>
@@ -451,12 +482,18 @@
                                     <span class="pill-stable"><i class="bi bi-check-circle-fill"></i> On Track</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td style="min-width:120px;">
+                                {% if 'Degraded' in row.Status %}
                                 <a href="{% url 'forecasting:results' %}?drug={{ row.Drug }}&year=2025"
-                                   class="btn btn-sm btn-outline-primary py-0"
-                                   title="View {{ row.Drug }} 2025 performance chart">
-                                    <i class="bi bi-graph-up"></i>
+                                   class="btn btn-sm btn-outline-danger py-1 px-2"
+                                   title="Review {{ row.Drug }} forecast performance">
+                                    <i class="bi bi-graph-up me-1"></i>Review &rarr;
                                 </a>
+                                {% else %}
+                                <span class="text-muted small">
+                                    <i class="bi bi-check text-success me-1"></i>No action needed
+                                </span>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -477,7 +514,7 @@
 {% block extra_js %}
 {{ comparison|json_script:"comparison-data" }}
 <script>
-// ── Set KPI bar widths and colours from data attributes ──────────────────────
+// ── KPI bar widths ────────────────────────────────────────────────────────────
 document.querySelectorAll('.kpi-bar-fill[data-width]').forEach(function(el) {
     var w = parseFloat(el.getAttribute('data-width')) || 0;
     el.style.width = Math.max(w, 4) + '%';
@@ -485,34 +522,50 @@ document.querySelectorAll('.kpi-bar-fill[data-width]').forEach(function(el) {
     if (color) { el.style.background = color; }
 });
 
-// ── MAE chart — built natively in JS (avoids Python→Plotly JSON issues) ───────
+// ── MAE chart — with acceptable error threshold line ─────────────────────────
 (function () {
-    const raw   = JSON.parse(document.getElementById('comparison-data').textContent);
-    const drugs = raw.map(r => r.Drug);
-    const mae18 = raw.map(r => parseFloat(r.MAE_2018) || 0);
-    const mae19 = raw.map(r => parseFloat(r.MAE_2019) || 0);
+    const raw       = JSON.parse(document.getElementById('comparison-data').textContent);
+    const drugs     = raw.map(r => r.Drug);
+    const mae18     = raw.map(r => parseFloat(r.MAE_2018) || 0);
+    const mae19     = raw.map(r => parseFloat(r.MAE_2019) || 0);
+    const threshold = {{ mae_threshold }};
 
     const trace1 = {
         type: 'bar',
-        name: 'Primary Method (2025)',
+        name: 'Forecasting System',
         x: drugs, y: mae18,
         marker: { color: '#0d6efd', opacity: .85 },
-        text: mae18.map(v => v.toFixed(2)),
+        text: mae18.map(v => v.toFixed(1) + ' u'),
         textposition: 'outside',
         cliponaxis: false,
     };
     const trace2 = {
         type: 'bar',
-        name: 'Backup Method (2025)',
+        name: 'Backup System (auto-selected)',
         x: drugs, y: mae19,
         marker: { color: '#198754', opacity: .85 },
-        text: mae19.map(v => v.toFixed(2)),
+        text: mae19.map(v => v.toFixed(1) + ' u'),
         textposition: 'outside',
         cliponaxis: false,
     };
 
     Plotly.newPlot('mae-chart', [trace1, trace2], {
         barmode: 'group',
+        shapes: [{
+            type: 'line', xref: 'paper', yref: 'y',
+            x0: 0, x1: 1, y0: threshold, y1: threshold,
+            line: { color: '#dc3545', width: 2, dash: 'dot' }
+        }],
+        annotations: [{
+            xref: 'paper', yref: 'y',
+            x: 0.98, y: threshold,
+            xanchor: 'right', yanchor: 'bottom',
+            text: 'Acceptable limit: ' + threshold + ' units',
+            font: { size: 11, color: '#dc3545' },
+            showarrow: false,
+            bgcolor: 'rgba(255,255,255,0.8)',
+            borderpad: 3,
+        }],
         xaxis: { title: { text: 'Drug (ATC Code)', standoff: 8 }, tickangle: 0 },
         yaxis: { title: { text: 'Average Weekly Error (units)', standoff: 8 }, zeroline: true, rangemode: 'tozero' },
         legend: { orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1 },
@@ -523,8 +576,37 @@ document.querySelectorAll('.kpi-bar-fill[data-width]').forEach(function(el) {
     }, { responsive: true, displayModeBar: false });
 })();
 
+// ── Table: auto-sort — flagged drugs always shown first ───────────────────────
+(function sortUrgencyFirst() {
+    const tbody = document.getElementById('drug-tbody');
+    if (!tbody) return;
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    rows.sort(function(a, b) {
+        var aU = parseInt(a.getAttribute('data-urgency') || '9');
+        var bU = parseInt(b.getAttribute('data-urgency') || '9');
+        if (aU !== bU) return aU - bU;
+        // Secondary: higher error first within same urgency
+        var aM = parseFloat((a.cells[2] && a.cells[2].textContent) || '0');
+        var bM = parseFloat((b.cells[2] && b.cells[2].textContent) || '0');
+        return bM - aM;
+    });
+    rows.forEach(function(r) { tbody.appendChild(r); });
+})();
 
-// ── Table: sort ───────────────────────────────────────────────────────────────
+// ── Table: advanced-data toggle ───────────────────────────────────────────────
+function toggleAdvanced() {
+    var btn     = document.getElementById('adv-toggle-btn');
+    var showing = btn.getAttribute('data-showing') === '1';
+    document.querySelectorAll('.adv-col').forEach(function(el) {
+        el.classList.toggle('d-none', showing);
+    });
+    btn.setAttribute('data-showing', showing ? '0' : '1');
+    btn.innerHTML = showing
+        ? '<i class="bi bi-eye me-1"></i>Show advanced data'
+        : '<i class="bi bi-eye-slash me-1"></i>Hide advanced data';
+}
+
+// ── Table: sort by column ─────────────────────────────────────────────────────
 const _sortDir = {};
 
 function sortDrugTable(col) {
@@ -532,45 +614,44 @@ function sortDrugTable(col) {
     const rows  = Array.from(tbody.querySelectorAll('tr'));
     _sortDir[col] = _sortDir[col] === 'asc' ? 'desc' : 'asc';
 
-    document.querySelectorAll('#drug-table th[data-col]').forEach(th => {
+    document.querySelectorAll('#drug-table th[data-col]').forEach(function(th) {
         th.classList.remove('th-sorted');
-        const ic = th.querySelector('.sort-icon');
+        var ic = th.querySelector('.sort-icon');
         if (ic) ic.className = 'sort-icon bi bi-arrow-down-up';
     });
-    const activeTh = document.querySelector(`#drug-table th[data-col="${col}"]`);
+    var activeTh = document.querySelector('#drug-table th[data-col="' + col + '"]');
     if (activeTh) {
         activeTh.classList.add('th-sorted');
-        const ic = activeTh.querySelector('.sort-icon');
+        var ic = activeTh.querySelector('.sort-icon');
         if (ic) ic.className = _sortDir[col] === 'asc' ? 'sort-icon bi bi-arrow-up' : 'sort-icon bi bi-arrow-down';
     }
 
-    rows.sort((a, b) => {
-        const aRaw = (a.cells[col]?.textContent || '').trim();
-        const bRaw = (b.cells[col]?.textContent || '').trim();
-        const aNum = parseFloat(aRaw.replace(/[^0-9.\-]/g, ''));
-        const bNum = parseFloat(bRaw.replace(/[^0-9.\-]/g, ''));
-        const aVal = isNaN(aNum) ? aRaw.toLowerCase() : aNum;
-        const bVal = isNaN(bNum) ? bRaw.toLowerCase() : bNum;
+    rows.sort(function(a, b) {
+        var aRaw = (a.cells[col] ? a.cells[col].textContent : '').trim();
+        var bRaw = (b.cells[col] ? b.cells[col].textContent : '').trim();
+        var aNum = parseFloat(aRaw.replace(/[^0-9.\-]/g, ''));
+        var bNum = parseFloat(bRaw.replace(/[^0-9.\-]/g, ''));
+        var aVal = isNaN(aNum) ? aRaw.toLowerCase() : aNum;
+        var bVal = isNaN(bNum) ? bRaw.toLowerCase() : bNum;
         if (aVal < bVal) return _sortDir[col] === 'asc' ? -1 :  1;
         if (aVal > bVal) return _sortDir[col] === 'asc' ?  1 : -1;
         return 0;
     });
-    rows.forEach(r => tbody.appendChild(r));
+    rows.forEach(function(r) { tbody.appendChild(r); });
     updateFilterCount();
 }
 
-
-// ── Table: search + status filter ─────────────────────────────────────────────
+// ── Table: search + status filter ────────────────────────────────────────────
 function filterDrugTable() {
-    const query  = document.getElementById('drug-search').value.toLowerCase().trim();
-    const status = document.getElementById('status-filter').value;
-    let visible  = 0;
+    var query  = document.getElementById('drug-search').value.toLowerCase().trim();
+    var status = document.getElementById('status-filter').value;
+    var visible = 0;
 
-    document.querySelectorAll('#drug-tbody tr').forEach(row => {
-        const drug   = (row.cells[0]?.textContent || '').toLowerCase();
-        const rowSt  = row.getAttribute('data-status') || '';
-        const matchQ = !query || drug.includes(query);
-        const matchS = status === 'all' || rowSt === status;
+    document.querySelectorAll('#drug-tbody tr').forEach(function(row) {
+        var drug   = (row.cells[0] ? row.cells[0].textContent : '').toLowerCase();
+        var rowSt  = row.getAttribute('data-status') || '';
+        var matchQ = !query || drug.includes(query);
+        var matchS = status === 'all' || rowSt === status;
         if (matchQ && matchS) { row.style.display = ''; visible++; }
         else { row.style.display = 'none'; }
     });
@@ -580,11 +661,11 @@ function filterDrugTable() {
 }
 
 function updateFilterCount() {
-    const total   = document.querySelectorAll('#drug-tbody tr').length;
-    const visible = Array.from(document.querySelectorAll('#drug-tbody tr'))
-                         .filter(r => r.style.display !== 'none').length;
-    const el = document.getElementById('filter-count');
-    if (el) el.textContent = visible < total ? `Showing ${visible} of ${total}` : '';
+    var total   = document.querySelectorAll('#drug-tbody tr').length;
+    var visible = Array.from(document.querySelectorAll('#drug-tbody tr'))
+                       .filter(function(r) { return r.style.display !== 'none'; }).length;
+    var el = document.getElementById('filter-count');
+    if (el) el.textContent = visible < total ? 'Showing ' + visible + ' of ' + total : '';
 }
 </script>
 {% endblock %}

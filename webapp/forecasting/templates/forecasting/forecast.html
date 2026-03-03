@@ -120,7 +120,8 @@
                         {{ result.volume_segment }} Volume
                     </span>
                     <span class="badge bg-light text-dark border" style="font-size:.68rem;">
-                        <i class="bi bi-cpu me-1"></i>{{ result.model_used|default:"XGBoost" }}
+                        <i class="bi bi-cpu me-1"></i>
+                        {% if result.model_used == 'Holt-Winters' %}Backup System Active{% else %}Automated Forecast{% endif %}
                     </span>
                 </div>
             </div>
@@ -183,8 +184,7 @@
             {% if result.model_used == "Holt-Winters" %}
             <div class="alert alert-info mt-3 mb-0 py-2 px-3" style="font-size:.82rem;">
                 <i class="bi bi-info-circle me-1"></i>
-                <strong>Holt-Winters method used:</strong> This drug's demand pattern is better captured
-                by exponential smoothing than the primary ML model. Forecast is based on seasonal trend analysis.
+                <strong>Backup system active:</strong> This drug has seasonal or irregular demand, so the system automatically uses a different calculation approach. No action needed — the system handles this for you.
             </div>
             {% endif %}
         </div>
@@ -221,7 +221,7 @@
                 </div>
                 <div class="col border-end py-2">
                     <div class="fw-semibold">2014–2024</div>
-                    <div class="text-muted" style="font-size:.72rem;">Learned from</div>
+                    <div class="text-muted" style="font-size:.72rem;">Your pharmacy’s history</div>
                 </div>
                 <div class="col py-2">
                     <div class="fw-semibold
@@ -269,7 +269,9 @@
                             <td class="text-muted small">{{ r.date }}</td>
                             <td><strong class="text-primary">{{ r.prediction }}</strong></td>
                             <td class="text-muted small">{{ r.lower_bound }}–{{ r.upper_bound }}</td>
-                            <td class="text-muted small">{{ r.model_used|default:"XGBoost" }}</td>
+                            <td class="text-muted small">
+                                {% if r.model_used == 'Holt-Winters' %}Backup System{% else %}Automated{% endif %}
+                            </td>
                             <td>
                                 <span class="badge
                                     {% if r.confidence_tier == 'High' %}bg-success

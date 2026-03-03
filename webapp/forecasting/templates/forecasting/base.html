@@ -242,7 +242,7 @@
     </ul>
 
     <div class="sidebar-footer">
-        Using sales data from 2014–2024
+    Using sales data from 2014–2024
     </div>
 </aside> 
 
@@ -263,7 +263,7 @@
             <span class="badge bg-success rounded-pill">
                 <i class="bi bi-check-circle me-1"></i>System Active
             </span>
-            <small class="text-muted">Trained on 10 years of sales data</small>
+            <small class="text-muted">Based on your pharmacy’s 2014–2024 sales history</small>
         </div>
     </div>
 
@@ -283,6 +283,14 @@
 </div><!-- /main-wrapper -->
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // Initialise Bootstrap tooltips globally
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+            new bootstrap.Tooltip(el, { placement: 'top', trigger: 'hover focus' });
+        });
+    });
+</script>
 {% block extra_js %}{% endblock %}
 </body>
 </html>

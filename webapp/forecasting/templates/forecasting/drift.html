@@ -17,48 +17,57 @@
 <!-- ── Alert banner ───────────────────────────────────────────────────── -->
 {% if drugs_drifted > 0 %}
 <div class="alert alert-warning d-flex align-items-start gap-2 mb-4">
-    <i class="bi bi-bar-chart-steps fs-5 mt-1"></i>
+    <i class="bi bi-exclamation-triangle-fill fs-5 mt-1"></i>
     <div>
-        <strong>Accuracy Note:</strong>
-        {{ drugs_drifted }} out of {{ total_drugs }} drug{% if drugs_drifted != 1 %}s are{% else %} is{% endif %} performing below expectations.
-        Overall the system correctly predicts {{ r2_display_pct }}% of demand variation across all drugs.
+        <strong>{{ drugs_drifted }} drug{% if drugs_drifted != 1 %}s need{% else %} needs{% endif %} your attention.</strong>
+        The forecast error for {% if drugs_drifted == 1 %}this drug{% else %}these drugs{% endif %} is higher than expected.
+        {{ drugs_stable }} of {{ total_drugs }} drugs are forecasting accurately.
+        <strong>No setting changes are needed</strong> — the system continues to forecast automatically.
+        {% if drugs_drifted > 0 %}<a href="#drug-breakdown" class="alert-link">See which drugs ↓</a>{% endif %}
     </div>
 </div>
 {% else %}
 <div class="alert alert-success d-flex align-items-start gap-2 mb-4">
     <i class="bi bi-check-circle-fill fs-5 mt-1"></i>
-    <div>All {{ total_drugs }} drugs are performing within expectations. The system correctly predicts {{ r2_display_pct }}% of demand variation across all drugs.</div>
+    <div>
+        <strong>All {{ total_drugs }} drugs are forecasting accurately.</strong>
+        No action needed — the system is working well. It correctly predicted demand changes in {{ r2_display_pct }}% of weeks tested.
+    </div>
 </div>
 {% endif %}
 
 <!-- ── Summary metric cards ───────────────────────────────────────────── -->
 <div class="row g-3 mb-4">
     <div class="col-sm-6 col-lg-3">
-        <div class="metric-card h-100" style="background:#eff6ff;">
+        <a href="#drug-breakdown" class="text-decoration-none">
+        <div class="metric-card h-100" style="background:#eff6ff; cursor:pointer;">
             <div class="metric-value" style="color:#0284c7;">{{ drugs_stable }}</div>
-            <div class="metric-label" style="color:#0284c7;">Drugs On Target</div>
-            <div class="metric-hint text-muted">Forecast accuracy within expected range in 2025</div>
-        </div>
+            <div class="metric-label" style="color:#0284c7;">Drugs Forecasting Accurately</div>
+            <div class="metric-hint text-muted">Forecast error within acceptable range in 2025</div>
+        </div></a>
     </div>
     <div class="col-sm-6 col-lg-3">
-        <div class="metric-card h-100" style="background:#eff6ff;">
-            <div class="metric-value" style="color:#0284c7;">{{ drugs_drifted }}</div>
-            <div class="metric-label" style="color:#0284c7;">Drugs Needing Review</div>
-            <div class="metric-hint text-muted">Forecast accuracy below expected range in 2025</div>
-        </div>
+        <a href="#drug-breakdown" class="text-decoration-none">
+        <div class="metric-card h-100" style="background:{% if drugs_drifted > 0 %}#fff5f5{% else %}#eff6ff{% endif %}; cursor:pointer;">
+            <div class="metric-value" style="color:{% if drugs_drifted > 0 %}#dc3545{% else %}#0284c7{% endif %};">{{ drugs_drifted }}</div>
+            <div class="metric-label" style="color:{% if drugs_drifted > 0 %}#dc3545{% else %}#0284c7{% endif %};">Drugs Needing Attention</div>
+            <div class="metric-hint text-muted">
+                {% if drugs_drifted > 0 %}Check stock levels for these drugs{% else %}All drugs within expected range{% endif %}
+            </div>
+        </div></a>
     </div>
     <div class="col-sm-6 col-lg-3">
         <div class="metric-card h-100" style="background:#eff6ff;">
             <div class="metric-value" style="color:#0284c7;">{{ mae_threshold }} units</div>
             <div class="metric-label" style="color:#0284c7;">Acceptable Weekly Error</div>
-            <div class="metric-hint text-muted">Forecasts within {{ mae_threshold }} units are considered accurate</div>
+            <div class="metric-hint text-muted">Forecasts within {{ mae_threshold }} units/week are considered accurate for your ordering decisions</div>
         </div>
     </div>
     <div class="col-sm-6 col-lg-3">
         <div class="metric-card h-100" style="background:#eff6ff;">
             <div class="metric-value" style="color:#0284c7;">{{ mape_threshold }}%</div>
             <div class="metric-label" style="color:#0284c7;">Acceptable Error Rate</div>
-            <div class="metric-hint text-muted">Forecasts within {{ mape_threshold }}% are considered acceptable</div>
+            <div class="metric-hint text-muted">Forecasts within {{ mape_threshold }}% of actual sales are considered acceptable</div>
         </div>
     </div>
 </div>
@@ -70,57 +79,91 @@
 
 <!-- ── Per-drug accuracy table ─────────────────────────────────────────── -->
 <div class="table-card">
-    <div class="p-3 border-bottom d-flex align-items-center justify-content-between">
-        <h6 class="mb-0 fw-semibold">Drug-by-Drug Breakdown</h6>
-        <small class="text-muted">Results from 2025 — data the system had never seen before</small>
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div>
+            <h6 class="mb-0 fw-semibold" id="drug-breakdown">Drug-by-Drug Breakdown</h6>
+            <small class="text-muted">Flagged drugs shown first &middot; Results from 2025 data the system had never seen before</small>
+        </div>
+        <button id="drift-adv-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleDriftAdvanced()" data-showing="0">
+            <i class="bi bi-eye me-1"></i>Show advanced data
+        </button>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
             <thead>
                 <tr>
-                    <th>Drug</th>
-                    <th>What It Treats</th>
-                    <th title="Primary method average weekly error in 2025">Avg Error (Primary) <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
-                    <th title="Backup method average weekly error in 2025">Avg Error (Backup) <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
-                    <th title="Forecast error as a percentage of actual sales">Error % <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
-                    <th title="Accuracy score in 2025 — 1.0 = perfect">Accuracy Score <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
-                    <th>Error Change</th>
+                    <th style="min-width:150px;">Drug</th>
+                    <th style="min-width:110px;">What It Treats</th>
+                    <th title="On average, the forecast was off by this many units per week — lower is better">
+                        Avg Weekly Error <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i>
+                    </th>
+                    <th class="drift-adv d-none"
+                        title="Backup system average weekly error — used automatically when demand is irregular">
+                        Backup System Error
+                        <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"
+                           data-bs-toggle="tooltip"
+                           data-bs-title="The backup system is used automatically for some drugs — no action needed."></i>
+                    </th>
+                    <th class="drift-adv d-none">Error % of Sales</th>
+                    <th class="drift-adv d-none"
+                        title="How reliably the forecast tracked demand changes — higher is better, 1.0 = perfect">
+                        Reliability <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i>
+                    </th>
+                    <th class="drift-adv d-none">Error Change vs Primary</th>
                     <th>Forecast Status</th>
-                    <th>Chart</th>
+                    <th>Next Step</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="drift-tbody">
                 {% for row in comparison %}
-                <tr class="{% if row.Drug == 'N05C' %}row-critical{% elif 'Degraded' in row.Status %}row-degraded{% else %}row-stable{% endif %}">
-                    <td><strong>{{ row.Drug }}</strong>
-                        {% if row.Drug == 'N05C' %}
-                        <span class="badge bg-warning text-dark ms-1" style="font-size:.65rem;">Below expectation</span>
-                        {% endif %}
+                <tr class="{% if 'Degraded' in row.Status %}row-degraded{% else %}row-stable{% endif %}"
+                    data-urgency="{% if 'Degraded' in row.Status %}1{% else %}2{% endif %}">
+                    <td>
+                        <strong>{{ row.Drug }}</strong>
+                        <div class="text-muted" style="font-size:.74rem;">
+                            {% if row.Drug == "M01AB" %}Anti-inflammatories
+                            {% elif row.Drug == "M01AE" %}Anti-inflammatories (Ibuprofen)
+                            {% elif row.Drug == "N02BA" %}Pain relief — Aspirin
+                            {% elif row.Drug == "N02BE" %}Pain relief — Paracetamol
+                            {% elif row.Drug == "N05B" %}Anxiety relief
+                            {% elif row.Drug == "N05C" %}Sleep aids
+                            {% elif row.Drug == "R03" %}Asthma &amp; breathing
+                            {% elif row.Drug == "R06" %}Allergy relief{% endif %}
+                        </div>
                     </td>
                     <td class="text-muted small">
-                        {% if row.Drug == "M01AB" %}Pain & swelling relief
-                        {% elif row.Drug == "M01AE" %}Pain & swelling relief
+                        {% if row.Drug == "M01AB" %}Pain &amp; swelling
+                        {% elif row.Drug == "M01AE" %}Pain &amp; swelling
                         {% elif row.Drug == "N02BA" %}Pain relief (Aspirin)
                         {% elif row.Drug == "N02BE" %}Pain relief (Paracetamol)
-                        {% elif row.Drug == "N05B"  %}Anxiety relief
-                        {% elif row.Drug == "N05C"  %}Sleep aids
-                        {% elif row.Drug == "R03"   %}Breathing / Asthma
-                        {% elif row.Drug == "R06"   %}Allergy relief
-                        {% else %}—{% endif %}
+                        {% elif row.Drug == "N05B" %}Anxiety
+                        {% elif row.Drug == "N05C" %}Sleep &amp; sedatives
+                        {% elif row.Drug == "R03" %}Breathing / Asthma
+                        {% elif row.Drug == "R06" %}Allergy relief{% endif %}
                     </td>
-                    <td>{{ row.MAE_2018 }}</td>
                     <td>
-                        <strong class="{% if row.MAE_2019 > mae_threshold %}text-warning{% else %}text-success{% endif %}">
-                            {{ row.MAE_2019 }}
+                        <strong class="{% if row.MAE_2018 > mae_threshold %}text-danger{% elif row.MAE_2018 > 10 %}text-warning{% else %}text-success{% endif %}">
+                            {{ row.MAE_2018 }} units/week
                         </strong>
                     </td>
-                    <td>{{ row.MAPE_2019 }}%</td>
-                    <td>
-                        <span class="{% if row.R2_2019 < 0 %}text-danger{% elif row.R2_2019 > 0.8 %}text-success{% else %}text-warning{% endif %}">
-                            {{ row.R2_2019 }}
-                        </span>
+                    <td class="drift-adv d-none">
+                        <strong class="{% if row.MAE_2019 > mae_threshold %}text-warning{% else %}text-success{% endif %}">
+                            {{ row.MAE_2019 }} units
+                        </strong>
                     </td>
-                    <td>
+                    <td class="drift-adv d-none">{{ row.MAPE_2019 }}%</td>
+                    <td class="drift-adv d-none">
+                        {% if row.R2_2019 >= 0.8 %}
+                        <span class="text-success">&#x2605;&#x2605;&#x2605;&#x2605; Strong</span>
+                        {% elif row.R2_2019 >= 0.5 %}
+                        <span class="text-warning">&#x2605;&#x2605;&#x2605; Moderate</span>
+                        {% elif row.R2_2019 >= 0 %}
+                        <span class="text-warning">&#x2605;&#x2605; Weak</span>
+                        {% else %}
+                        <span class="text-danger">&#x2605; Poor &mdash; treat as indicative</span>
+                        {% endif %}
+                    </td>
+                    <td class="drift-adv d-none">
                         {% if row.Change_Percent > 0 %}
                         <span class="text-danger fw-semibold">+{{ row.Change_Percent|floatformat:1 }}%</span>
                         {% else %}
@@ -128,17 +171,23 @@
                         {% endif %}
                     </td>
                     <td>
-                        {% if row.Change_Percent < -20 %}
-                        <span class="badge badge-degraded text-white">⚠ Needs Review</span>
+                        {% if 'Degraded' in row.Status %}
+                        <span class="pill-degraded"><i class="bi bi-exclamation-circle-fill"></i> &#x26A0; Needs Review</span>
                         {% else %}
-                        <span class="badge badge-stable text-white">✓ On Target</span>
+                        <span class="pill-stable"><i class="bi bi-check-circle-fill"></i> &#x2705; On Track</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td style="min-width:130px;">
+                        {% if 'Degraded' in row.Status %}
                         <a href="{% url 'forecasting:results' %}?drug={{ row.Drug }}&year=2025"
-                           class="btn btn-sm btn-outline-secondary py-0 px-2">
-                            <i class="bi bi-graph-up"></i>
+                           class="btn btn-sm btn-outline-danger py-1 px-2">
+                            <i class="bi bi-graph-up me-1"></i>Review &rarr;
                         </a>
+                        {% else %}
+                        <span class="text-muted small">
+                            <i class="bi bi-check text-success me-1"></i>No action needed
+                        </span>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -146,27 +195,26 @@
         </table>
     </div>
 </div>
-
 <!-- ── Recommendations ────────────────────────────────────────────────── -->
 <div class="chart-card mt-4">
     <h6 class="fw-semibold mb-3"><i class="bi bi-lightbulb me-2 text-warning"></i>System Insights &amp; Guidance</h6>
     <div class="row g-3">
         <div class="col-md-4">
             <div class="p-3 rounded" style="background:#e8f0fe;">
-                <div class="fw-semibold mb-1"><i class="bi bi-graph-up-arrow me-1"></i>Primary Method — Best Overall</div>
-                <small class="text-muted">The primary forecasting method achieves the highest accuracy score ({{ r2_2018 }} / 1.0) on 2025 data, meaning it best tracks demand changes across all drugs. It is used automatically for most drugs.</small>
+                <div class="fw-semibold mb-1"><i class="bi bi-graph-up-arrow me-1"></i>Forecasting System &mdash; Most Reliable</div>
+                <small class="text-muted">The main forecasting system tracks demand changes across all drugs with {{ r2_display_pct }}% reliability. It is used automatically for most drugs. No action needed from you.</small>
             </div>
         </div>
         <div class="col-md-4">
             <div class="p-3 rounded" style="background:#e9f7ef;">
-                <div class="fw-semibold mb-1"><i class="bi bi-shield-check me-1"></i>Backup Method — Lowest Error</div>
-                <small class="text-muted">The backup method achieves the lowest average weekly error ({{ mae_2019 }} units) in 2025. It is used automatically for stable, low-volume drugs.</small>
+                <div class="fw-semibold mb-1"><i class="bi bi-shield-check me-1"></i>Backup System &mdash; Handles Irregular Drugs</div>
+                <small class="text-muted">The backup system achieves the lowest average weekly error ({{ mae_2019 }} units) for drugs with seasonal or unpredictable demand. It is selected automatically &mdash; no configuration needed.</small>
             </div>
         </div>
         <div class="col-md-4">
             <div class="p-3 rounded" style="background:#fdf0f0;">
-                <div class="fw-semibold mb-1"><i class="bi bi-info-circle me-1"></i>Model Selection is Automatic</div>
-                <small class="text-muted">The system selects the best approach for each drug automatically. You do not need to choose or configure a forecasting method.</small>
+                <div class="fw-semibold mb-1"><i class="bi bi-info-circle me-1"></i>What You Need to Do</div>
+                <small class="text-muted">{% if drugs_drifted > 0 %}Review the {{ drugs_drifted }} drug{% if drugs_drifted != 1 %}s{% endif %} flagged above and consider checking stock levels. The system continues forecasting automatically.{% else %}Nothing &mdash; all drugs are forecasting accurately. Check back after your next stock cycle.{% endif %}</small>
             </div>
         </div>
     </div>
@@ -175,7 +223,52 @@
 
 {% block extra_js %}
 <script>
+// ── Render drift chart then add threshold line ────────────────────────────────
 const driftData = JSON.parse('{{ drift_chart|escapejs }}');
 Plotly.newPlot('drift-chart', driftData.data, driftData.layout, {responsive: true, displayModeBar: false});
+Plotly.relayout('drift-chart', {
+    shapes: [{
+        type: 'line', xref: 'x', yref: 'paper',
+        x0: {{ mae_threshold }}, x1: {{ mae_threshold }},
+        y0: 0, y1: 1,
+        line: { color: '#dc3545', width: 2, dash: 'dot' }
+    }],
+    annotations: [{
+        xref: 'x', yref: 'paper',
+        x: {{ mae_threshold }}, y: 1,
+        xanchor: 'left', yanchor: 'top',
+        text: 'Acceptable limit: {{ mae_threshold }} units',
+        font: { size: 11, color: '#dc3545' },
+        showarrow: false,
+        bgcolor: 'rgba(255,255,255,0.85)',
+        borderpad: 3,
+    }],
+});
+
+// ── Auto-sort: flagged drugs to top ──────────────────────────────────────────
+(function() {
+    var tbody = document.getElementById('drift-tbody');
+    if (!tbody) return;
+    var rows = Array.from(tbody.querySelectorAll('tr'));
+    rows.sort(function(a, b) {
+        var aU = parseInt(a.getAttribute('data-urgency') || '9');
+        var bU = parseInt(b.getAttribute('data-urgency') || '9');
+        return aU - bU;
+    });
+    rows.forEach(function(r) { tbody.appendChild(r); });
+})();
+
+// ── Advanced toggle ──────────────────────────────────────────────────────────
+function toggleDriftAdvanced() {
+    var btn = document.getElementById('drift-adv-btn');
+    var showing = btn.getAttribute('data-showing') === '1';
+    document.querySelectorAll('.drift-adv').forEach(function(el) {
+        el.classList.toggle('d-none', showing);
+    });
+    btn.setAttribute('data-showing', showing ? '0' : '1');
+    btn.innerHTML = showing
+        ? '<i class="bi bi-eye me-1"></i>Show advanced data'
+        : '<i class="bi bi-eye-slash me-1"></i>Hide advanced data';
+}
 </script>
 {% endblock %}

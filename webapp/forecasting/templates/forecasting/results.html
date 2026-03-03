@@ -19,9 +19,20 @@
     <form method="get" class="row g-2 align-items-end">
         <div class="col-auto">
             <label class="form-label fw-semibold mb-1">Drug (ATC Code)</label>
-            <select name="drug" class="form-select form-select-sm" style="min-width:130px;">
+            <select name="drug" class="form-select form-select-sm" style="min-width:200px;">
                 {% for d in drug_list %}
-                <option value="{{ d }}" {% if d == selected_drug %}selected{% endif %}>{{ d }}</option>
+                <option value="{{ d }}" {% if d == selected_drug %}selected{% endif %}>
+                    {{ d }}
+                    {% if d == "M01AB" %}– Anti-inflammatories (Aceclofenac)
+                    {% elif d == "M01AE" %}– Anti-inflammatories (Ibuprofen)
+                    {% elif d == "N02BA" %}– Pain relief — Aspirin
+                    {% elif d == "N02BE" %}– Pain relief — Paracetamol
+                    {% elif d == "N05B"  %}– Anxiety relief
+                    {% elif d == "N05C"  %}– Sleep aids
+                    {% elif d == "R03"   %}– Asthma &amp; breathing
+                    {% elif d == "R06"   %}– Allergy relief
+                    {% endif %}
+                </option>
                 {% endfor %}
             </select>
         </div>
@@ -53,13 +64,13 @@
     {% if selected_year == "2025" %}
     <div class="alert alert-info mb-3 py-2 px-3" style="font-size:.85rem;">
         <i class="bi bi-bar-chart-steps me-1"></i>
-        <strong>2025 Accuracy Test:</strong> The forecasting system was tested on 2025 data it had never seen during training.
-        Multiple methods were compared to verify the best possible accuracy.
+        <strong>2025 Accuracy Test:</strong> The forecasting system was tested on 2025 sales data it had never seen before.
+        This shows how accurately the system would have predicted your actual stock needs.
     </div>
     {% elif selected_year == "2019" %}
     <div class="alert alert-warning mb-3 py-2 px-3" style="font-size:.85rem;">
         <i class="bi bi-exclamation-triangle me-1"></i>
-        <strong>Real-World Test (2019):</strong> The forecasting system had never seen this data before. This shows how it performs on completely new, future sales.
+        <strong>Historical Test (2019):</strong> The system had never seen this data before. This shows real-world forecast accuracy on completely new sales weeks.
     </div>
     {% endif %}
     <div id="main-chart"></div>
@@ -89,56 +100,74 @@
                         {% if metrics.MAE %}
                         <tr>
                             <td>Average Forecast Error</td>
-                            <td><strong>{{ metrics.MAE }} units</strong></td>
-                            <td class="text-muted small">On average, the forecast was off by this many units per week</td>
+                            <td><strong>{{ metrics.MAE }} units/week</strong></td>
+                            <td class="text-muted small">On average, the forecast was off by this many units per week. Lower is better.</td>
                         </tr>
                         {% endif %}
                         {% if metrics.HW_MAE %}
                         <tr>
-                            <td>Backup Method Error</td>
-                            <td><strong class="text-success">{{ metrics.HW_MAE }} units</strong></td>
-                            <td class="text-muted small">Backup method average weekly error — lower is better</td>
+                            <td>
+                                Backup System Error
+                                <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"
+                                   data-bs-toggle="tooltip"
+                                   data-bs-title="The backup system is used automatically for drugs with irregular demand. No action needed."></i>
+                            </td>
+                            <td><strong class="text-success">{{ metrics.HW_MAE }} units/week</strong></td>
+                            <td class="text-muted small">Backup system weekly error — used automatically, lower is better</td>
                         </tr>
                         {% endif %}
                         {% if metrics.MAPE %}
                         <tr>
-                            <td>Error Percentage</td>
+                            <td>Error as % of Sales</td>
                             <td><strong>{{ metrics.MAPE }}%</strong></td>
-                            <td class="text-muted small">Forecast error as a percentage of actual sales</td>
+                            <td class="text-muted small">Forecast error as a percentage of actual weekly sales</td>
                         </tr>
                         {% endif %}
                         {% if metrics.R2 != "" and not metrics.HW_MAE %}
                         <tr>
-                            <td>Accuracy Score</td>
-                            <td><strong>{{ metrics.R2 }} / 1.0</strong></td>
-                            <td class="text-muted small">How well the forecast matched the real trend — 1.0 = perfect</td>
+                            <td>Forecast Reliability</td>
+                            <td>
+                                {% if metrics.R2 >= 0.8 %}
+                                <span class="badge" style="background:#d1f2e0; color:#0a4022; font-size:.82rem;">
+                                    <i class="bi bi-check-circle-fill me-1"></i>Strong &#x2605;&#x2605;&#x2605;&#x2605;
+                                </span>
+                                {% elif metrics.R2 >= 0.5 %}
+                                <span class="badge" style="background:#fff3cd; color:#7d5a00; font-size:.82rem;">
+                                    <i class="bi bi-exclamation-circle-fill me-1"></i>Moderate &#x2605;&#x2605;&#x2605;
+                                </span>
+                                {% elif metrics.R2 >= 0 %}
+                                <span class="badge" style="background:#ffe0cc; color:#7c3900; font-size:.82rem;">
+                                    <i class="bi bi-exclamation-triangle-fill me-1"></i>Weak &#x2605;&#x2605;
+                                </span>
+                                {% else %}
+                                <span class="badge" style="background:#f8d7da; color:#58151c; font-size:.82rem;">
+                                    <i class="bi bi-x-circle-fill me-1"></i>Poor &#x2605; — treat as indicative
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="text-muted small">How reliably the forecast tracked demand changes (raw score: {{ metrics.R2 }})</td>
                         </tr>
                         {% endif %}
                         {% if metrics.HW_R2 %}
                         <tr>
-                            <td>Primary Accuracy Score</td>
+                            <td>Forecast Reliability</td>
                             <td>
-                                <strong class="{% if metrics.R2 < 0 %}text-danger{% elif metrics.R2 >= 0.8 %}text-success{% else %}text-warning{% endif %}">
-                                    {{ metrics.R2 }} / 1.0
-                                </strong>
+                                {% if metrics.R2 >= 0.8 %}
+                                <span class="badge" style="background:#d1f2e0; color:#0a4022; font-size:.82rem;"><i class="bi bi-check-circle-fill me-1"></i>Strong</span>
+                                {% elif metrics.R2 >= 0.5 %}
+                                <span class="badge" style="background:#fff3cd; color:#7d5a00; font-size:.82rem;"><i class="bi bi-exclamation-circle-fill me-1"></i>Moderate</span>
+                                {% else %}
+                                <span class="badge" style="background:#f8d7da; color:#58151c; font-size:.82rem;"><i class="bi bi-x-circle-fill me-1"></i>Poor — treat as indicative</span>
+                                {% endif %}
                             </td>
-                            <td class="text-muted small">How well the forecast matched real sales — 1.0 = perfect</td>
-                        </tr>
-                        <tr>
-                            <td>Backup Accuracy Score</td>
-                            <td>
-                                <strong class="{% if metrics.HW_R2 < 0 %}text-danger{% elif metrics.HW_R2 >= 0.8 %}text-success{% else %}text-warning{% endif %}">
-                                    {{ metrics.HW_R2 }} / 1.0
-                                </strong>
-                            </td>
-                            <td class="text-muted small">Backup method accuracy score</td>
+                            <td class="text-muted small">How reliably the primary system tracked demand changes</td>
                         </tr>
                         {% endif %}
                         {% if metrics.Winner %}
                         <tr>
-                            <td>Best Result (by avg error)</td>
-                            <td><strong>—</strong></td>
-                            <td class="text-muted small">The most accurate forecast is used automatically</td>
+                            <td>Best Forecasting Approach</td>
+                            <td><strong class="text-success"><i class="bi bi-check-circle-fill me-1"></i>Selected Automatically</strong></td>
+                            <td class="text-muted small">The most accurate method is used automatically. No configuration needed.</td>
                         </tr>
                         {% endif %}
                     </tbody>

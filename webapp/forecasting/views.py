@@ -75,6 +75,8 @@ def dashboard(request):
             margin=dict(l=40, r=40, t=60, b=40),
         )
 
+        mae_threshold = round(mae_xgb * 1.20, 2)
+
         context = {
             "mae_2018":      mae_xgb,
             "mape_2018":     mape_xgb,
@@ -83,6 +85,7 @@ def dashboard(request):
             "mape_2019":     mape_hw,
             "r2_2019":       hw["r2"],
             "pct_change":    pct_change,
+            "mae_threshold": mae_threshold,
             "drugs_drifted": drugs_drifted,
             "drugs_stable":  drugs_stable,
             "total_drugs":   len(cmp_df),
