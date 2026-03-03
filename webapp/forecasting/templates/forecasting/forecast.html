@@ -39,10 +39,8 @@
                         </option>
                         {% endfor %}
                     </select>
-                    <div class="form-text text-warning fw-semibold mt-1" id="n02be-warning"
-                         style="display: none;">
-                        ⚠ N02BE (Paracetamol) — predictions for this drug are less reliable. We recommend checking stock manually.
-                    </div>
+                    <div class="form-text fw-semibold mt-1" id="drug-confidence-warning"
+                         style="display: none;"></div>
                 </div>
 
                 <div class="mb-3">
@@ -114,12 +112,17 @@
                     <h5 class="fw-bold mb-0">{{ result.drug }}</h5>
                     <small class="text-muted">{{ result.drug_description }}</small>
                 </div>
-                <span class="badge
-                    {% if result.volume_segment == 'High' %}bg-danger
-                    {% elif result.volume_segment == 'Low' %}bg-secondary
-                    {% else %}bg-primary{% endif %}">
-                    {{ result.volume_segment }} Volume
-                </span>
+                <div class="d-flex flex-column align-items-end gap-1">
+                    <span class="badge
+                        {% if result.volume_segment == 'High' %}bg-danger
+                        {% elif result.volume_segment == 'Low' %}bg-secondary
+                        {% else %}bg-primary{% endif %}">
+                        {{ result.volume_segment }} Volume
+                    </span>
+                    <span class="badge bg-light text-dark border" style="font-size:.68rem;">
+                        <i class="bi bi-cpu me-1"></i>{{ result.model_used|default:"XGBoost" }}
+                    </span>
+                </div>
             </div>
 
             <!-- Main prediction -->
@@ -130,11 +133,36 @@
                 </div>
                 <div class="text-muted mt-1">predicted units for week of {{ result.date }}</div>
                 <div class="mt-2 text-secondary" style="font-size:.85rem;">
-                    Expected range: <strong>{{ result.lower_bound }}</strong>
+                    Prediction interval: <strong>{{ result.lower_bound }}</strong>
                     – <strong>{{ result.upper_bound }}</strong> units
-                    <span class="ms-2 text-muted">(based on typical forecast error)</span>
+                    <span class="ms-2 text-muted">(±{{ result.mae_2018 }} units typical error)</span>
                 </div>
             </div>
+
+            <!-- Confidence tier banner -->
+            {% if result.confidence_tier == "High" %}
+            <div class="alert alert-success py-2 px-3 mb-3" style="font-size:.83rem;">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                <strong>High Confidence</strong> — This forecast is reliable for operational planning.
+                Typical weekly error: <strong>{{ result.mae_2018 }} units</strong>.
+            </div>
+            {% elif result.confidence_tier == "Medium" %}
+            <div class="alert alert-warning py-2 px-3 mb-3" style="font-size:.83rem;">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <strong>Medium Confidence</strong> — Demand for this drug is seasonally variable.
+                The prediction interval (<strong>{{ result.lower_bound }}–{{ result.upper_bound }}</strong> units)
+                reflects this uncertainty. Add a safety-stock buffer when ordering.
+            </div>
+            {% elif result.confidence_tier %}
+            <div class="alert alert-danger py-2 px-3 mb-3" style="font-size:.83rem;">
+                <i class="bi bi-exclamation-octagon-fill me-2"></i>
+                <strong>Low Confidence</strong> — This drug has highly irregular demand.
+                The wide prediction interval (<strong>{{ result.lower_bound }}–{{ result.upper_bound }}</strong> units)
+                reflects significant uncertainty. Treat as indicative only and use the
+                <a href="{% url 'forecasting:inventory' %}" class="alert-link">Inventory Optimiser</a>
+                to set appropriate safety-stock levels.
+            </div>
+            {% endif %}
 
             <!-- Context row -->
             <div class="row g-2 text-center">
@@ -152,11 +180,11 @@
                 </div>
             </div>
 
-            {% if result.drug == "N02BE" %}
-            <div class="alert alert-warning mt-3 mb-0 py-2 px-3" style="font-size:.82rem;">
-                <i class="bi bi-exclamation-triangle me-1"></i>
-                <strong>Caution — Paracetamol (N02BE):</strong> Sales of this drug jumped dramatically in 2019 in a way the system had never seen before.
-                This forecast may not be reliable — use it as a rough guide only.
+            {% if result.model_used == "Holt-Winters" %}
+            <div class="alert alert-info mt-3 mb-0 py-2 px-3" style="font-size:.82rem;">
+                <i class="bi bi-info-circle me-1"></i>
+                <strong>Holt-Winters method used:</strong> This drug's demand pattern is better captured
+                by exponential smoothing than the primary ML model. Forecast is based on seasonal trend analysis.
             </div>
             {% endif %}
         </div>
@@ -196,7 +224,12 @@
                     <div class="text-muted" style="font-size:.72rem;">Learned from</div>
                 </div>
                 <div class="col py-2">
-                    <div class="fw-semibold text-success">High</div>
+                    <div class="fw-semibold
+                        {% if result.confidence_tier == 'High' %}text-success
+                        {% elif result.confidence_tier == 'Medium' %}text-warning
+                        {% else %}text-danger{% endif %}">
+                        {{ result.confidence_tier|default:"High" }}
+                    </div>
                     <div class="text-muted" style="font-size:.72rem;">Confidence level</div>
                 </div>
             </div>
@@ -219,28 +252,33 @@
                             <th>Drug</th>
                             <th>Date</th>
                             <th>Prediction</th>
-                            <th>Range</th>
-                            <th title="Average forecast error from 2018 training">Avg Error (2018) <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
+                            <th>Interval</th>
+                            <th>Method</th>
+                            <th>Confidence</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for r in batch_results %}
                         <tr {% if r.error %}class="table-danger"{% endif %}>
                             {% if r.error %}
-                            <td colspan="5" class="text-danger small">
+                            <td colspan="6" class="text-danger small">
                                 <i class="bi bi-exclamation-circle me-1"></i>{{ r.error }}
                             </td>
                             {% else %}
-                            <td>
-                                <strong>{{ r.drug }}</strong>
-                                {% if r.drug == "N02BE" %}
-                                <span class="badge bg-warning text-dark ms-1" style="font-size:.6rem;">⚠ Use With Caution</span>
-                                {% endif %}
-                            </td>
+                            <td><strong>{{ r.drug }}</strong></td>
                             <td class="text-muted small">{{ r.date }}</td>
                             <td><strong class="text-primary">{{ r.prediction }}</strong></td>
                             <td class="text-muted small">{{ r.lower_bound }}–{{ r.upper_bound }}</td>
-                            <td class="text-muted small">{{ r.mae_2018 }}</td>
+                            <td class="text-muted small">{{ r.model_used|default:"XGBoost" }}</td>
+                            <td>
+                                <span class="badge
+                                    {% if r.confidence_tier == 'High' %}bg-success
+                                    {% elif r.confidence_tier == 'Medium' %}bg-warning text-dark
+                                    {% else %}bg-danger{% endif %}"
+                                    style="font-size:.65rem;">
+                                    {{ r.confidence_tier|default:"—" }}
+                                </span>
+                            </td>
                             {% endif %}
                         </tr>
                         {% endfor %}
@@ -279,10 +317,26 @@
 <script>
 (function () {
     var select  = document.getElementById('drug-select');
-    var warning = document.getElementById('n02be-warning');
+    var warning = document.getElementById('drug-confidence-warning');
     if (!select || !warning) return;
+
+    var MEDIUM_DRUGS = ['N02BE', 'R03', 'R06'];
+    var LOW_DRUGS    = ['N05C', 'N02BA', 'N05B'];
+
     select.addEventListener('change', function () {
-        warning.style.display = (this.value === 'N02BE') ? 'block' : 'none';
+        var drug = this.value;
+        if (LOW_DRUGS.indexOf(drug) !== -1) {
+            warning.className = 'form-text text-danger fw-semibold mt-1';
+            warning.innerHTML = '&#9888; Low confidence drug — highly irregular demand. ' +
+                                'Treat forecast as indicative only and use the Inventory Optimiser.';
+            warning.style.display = 'block';
+        } else if (MEDIUM_DRUGS.indexOf(drug) !== -1) {
+            warning.className = 'form-text text-warning fw-semibold mt-1';
+            warning.innerHTML = '&#9888; Medium confidence drug — add a safety-stock buffer when ordering.';
+            warning.style.display = 'block';
+        } else {
+            warning.style.display = 'none';
+        }
     });
 })();
 </script>

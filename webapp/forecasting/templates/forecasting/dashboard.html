@@ -323,7 +323,7 @@
                 <div>
                     <h6 class="mb-0 fw-semibold">Forecast Error by Drug — 2025 Test</h6>
                     <small class="text-muted">
-                        Lower bars = more accurate. Primary (blue) vs Backup (green) vs Third method (red) on 2025 data the system had never seen.
+                        Lower bars = more accurate. Primary (blue) vs Backup (green) on 2025 data the system had never seen.
                     </small>
                 </div>
                 <a href="{% url 'forecasting:drift' %}" class="btn btn-sm btn-outline-danger">
@@ -492,8 +492,6 @@ document.querySelectorAll('.kpi-bar-fill[data-width]').forEach(function(el) {
     const mae18 = raw.map(r => parseFloat(r.MAE_2018) || 0);
     const mae19 = raw.map(r => parseFloat(r.MAE_2019) || 0);
 
-    const sarMae = raw.map(r => parseFloat(r.SAR_MAE) || 0);
-
     const trace1 = {
         type: 'bar',
         name: 'Primary Method (2025)',
@@ -512,17 +510,8 @@ document.querySelectorAll('.kpi-bar-fill[data-width]').forEach(function(el) {
         textposition: 'outside',
         cliponaxis: false,
     };
-    const trace3 = {
-        type: 'bar',
-        name: 'Third Method (2025)',
-        x: drugs, y: sarMae,
-        marker: { color: '#dc3545', opacity: .85 },
-        text: sarMae.map(v => v.toFixed(2)),
-        textposition: 'outside',
-        cliponaxis: false,
-    };
 
-    Plotly.newPlot('mae-chart', [trace1, trace2, trace3], {
+    Plotly.newPlot('mae-chart', [trace1, trace2], {
         barmode: 'group',
         xaxis: { title: { text: 'Drug (ATC Code)', standoff: 8 }, tickangle: 0 },
         yaxis: { title: { text: 'Average Weekly Error (units)', standoff: 8 }, zeroline: true, rangemode: 'tozero' },

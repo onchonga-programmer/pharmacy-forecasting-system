@@ -31,7 +31,6 @@ def dashboard(request):
 
         xgb = m25["xgb"]
         hw  = m25["hw"]
-        sar = m25["sar"]
 
         # Overall 2025 metrics (XGBoost = primary model, HW = best competitor)
         mae_xgb   = xgb["mae"]
@@ -46,7 +45,7 @@ def dashboard(request):
         drugs_drifted = int(cmp_df["Status"].str.contains("Degraded", na=False).sum())
         drugs_stable  = len(cmp_df) - drugs_drifted
 
-        # ── MAE comparison bar chart — XGBoost vs HW vs SARIMA ──
+        # ── MAE comparison bar chart — XGBoost vs HW ──
         fig = go.Figure(data=[
             go.Bar(
                 name="Primary Method (2025)",
@@ -62,14 +61,6 @@ def dashboard(request):
                 y=cmp_df["MAE_2019"].tolist(),      # MAE_2019 = HW_MAE
                 marker_color="#198754",
                 text=[f"{v:.2f}" for v in cmp_df["MAE_2019"]],
-                textposition="outside",
-            ),
-            go.Bar(
-                name="Third Method (2025)",
-                x=cmp_df["Drug"].tolist(),
-                y=cmp_df["SAR_MAE"].tolist(),
-                marker_color="#dc3545",
-                text=[f"{v:.2f}" for v in cmp_df["SAR_MAE"]],
                 textposition="outside",
             ),
         ])
@@ -91,7 +82,6 @@ def dashboard(request):
             "mae_2019":      mae_hw,
             "mape_2019":     mape_hw,
             "r2_2019":       hw["r2"],
-            "mae_sar":       sar["mae"],
             "pct_change":    pct_change,
             "drugs_drifted": drugs_drifted,
             "drugs_stable":  drugs_stable,
@@ -121,7 +111,6 @@ def results(request):
             actual   = drug_preds["total_quantity"].tolist()
             xgb_pred = drug_preds["xgb_pred"].tolist()
             hw_pred  = drug_preds["hw_pred"].tolist()
-            sar_pred = drug_preds["sarima_pred"].tolist()
 
             fig = go.Figure()
             fig.add_trace(go.Scatter(
@@ -138,11 +127,6 @@ def results(request):
                 x=dates, y=hw_pred,
                 mode="lines+markers", name="Backup Method",
                 line=dict(color="#198754", width=2, dash="dot"), marker=dict(size=4),
-            ))
-            fig.add_trace(go.Scatter(
-                x=dates, y=sar_pred,
-                mode="lines+markers", name="Third Method",
-                line=dict(color="#dc3545", width=1.5, dash="dashdot"), marker=dict(size=4),
             ))
             fig.update_layout(
                 title=dict(
@@ -168,7 +152,6 @@ def results(request):
                     "R2":     round(float(r["XGB_R2"]), 4),
                     "HW_MAE": round(float(r["HW_MAE"]), 2),
                     "HW_R2":  round(float(r["HW_R2"]), 4),
-                    "SAR_MAE": round(float(r["SAR_MAE"]), 2),
                     "Winner": str(r.get("Winner", "")),
                 }
             else:

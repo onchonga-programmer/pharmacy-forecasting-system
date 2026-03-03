@@ -51,8 +51,42 @@ _model_cache = None
 _historical_data_cache = None
 _hw_cache: dict = {}          # drug_name → fitted ExponentialSmoothing result
 
-# ── Drugs that default to Holt-Winters (low-volume, stable seasonal demand) ──
-HW_PREFERRED_DRUGS = {"N05C"}   # extend if more drugs favour HW in future
+# ── Drugs that use Holt-Winters as primary (low-volume / irregular demand) ──────
+# N05C: hypnotics/sedatives — low volume, near-random demand (WMAPE 56%)
+# N02BA: salicylates/aspirin — irregular purchasing, HW beats XGBoost on MAE
+HW_PREFERRED_DRUGS = {"N05C", "N02BA"}
+
+# ── Confidence tiers derived from 2025 out-of-sample WMAPE per drug ───────────
+# High  : WMAPE ≤ 20%  — forecasts are reliable for operational planning
+# Medium: WMAPE 21-35% — forecasts are usable but carry meaningful uncertainty
+# Low   : WMAPE > 35%  — treat as indicative; use safety-stock rules alongside
+CONFIDENCE_TIERS = {
+    "M01AB": "High",   # WMAPE ~16%
+    "M01AE": "High",   # WMAPE ~15%
+    "N02BE": "Medium", # WMAPE ~23%
+    "R03":   "Medium", # WMAPE ~25%
+    "R06":   "Medium", # WMAPE ~26%
+    "N05B":  "Low",    # WMAPE ~45%
+    "N05C":  "Low",    # WMAPE ~56%
+    "N02BA": "Low",    # WMAPE ~88%
+}
+
+# ── Interval width multipliers — wider bands for less confident drugs ──────────
+# Lower bound = prediction − multiplier × MAE
+# Upper bound = prediction + multiplier × MAE
+INTERVAL_MULTIPLIERS = {"High": 1.5, "Medium": 2.0, "Low": 2.5}
+
+# ── 2025 per-drug MAE: XGBoost primary model ──────────────────────────────────
+XGB_MAE_BY_DRUG = {
+    "M01AB": 7.91, "M01AE": 4.84, "N02BA": 5.19, "N02BE": 48.89,
+    "N05B":  15.17, "N05C":  2.41, "R03":   20.98, "R06":   8.95,
+}
+
+# ── 2025 per-drug MAE: Holt-Winters fallback model ────────────────────────────
+HW_MAE_BY_DRUG = {
+    "M01AB": 7.79, "M01AE": 4.62, "N02BA": 4.84, "N02BE": 45.64,
+    "N05B":  13.77, "N05C":  1.95, "R03":   18.49, "R06":   7.74,
+}
 
 
 # ── Loaders ───────────────────────────────────────────────────────────────────
@@ -141,12 +175,9 @@ def generate_hw_forecast(drug_name: str, forecast_date) -> dict:
     ) if len(history) > 0 else float(history["total_quantity"].mean())
     recent_avg = float(history["total_quantity"].tail(4).mean())
 
-    # Use 2025 per-drug HW MAE as confidence width (fallback to 5.0)
-    HW_MAE_BY_DRUG = {
-        "M01AB": 7.79, "M01AE": 4.62, "N02BA": 4.84, "N02BE": 45.64,
-        "N05B": 13.77, "N05C": 1.95,  "R03": 18.49,  "R06": 7.74,
-    }
     hw_mae = HW_MAE_BY_DRUG.get(drug_name, 5.0)
+    tier   = CONFIDENCE_TIERS.get(drug_name, "Medium")
+    mult   = INTERVAL_MULTIPLIERS.get(tier, 2.0)
 
     return {
         "drug":             drug_name,
@@ -154,12 +185,13 @@ def generate_hw_forecast(drug_name: str, forecast_date) -> dict:
         "volume_segment":   VOLUME_SEGMENTS.get(drug_name, "Medium"),
         "date":             str(forecast_date.date()),
         "prediction":       prediction,
-        "lower_bound":      max(0.0, round(prediction - 2 * hw_mae, 2)),
-        "upper_bound":      round(prediction + 2 * hw_mae, 2),
+        "lower_bound":      max(0.0, round(prediction - mult * hw_mae, 2)),
+        "upper_bound":      round(prediction + mult * hw_mae, 2),
         "seasonal_avg":     round(seasonal_avg, 2),
         "recent_avg":       round(recent_avg, 2),
         "mae_2018":         hw_mae,
         "model_used":       "Holt-Winters",
+        "confidence_tier":  tier,
         "error":            None,
     }
 
@@ -225,7 +257,6 @@ def load_2025_metrics() -> dict:
     return {
         "xgb": {"mae": 14.29, "rmse": 24.85, "mape": 28.54, "wmape": 25.11, "r2": 0.8774},
         "hw":  {"mae": 13.11, "rmse": 23.23, "mape": 29.23, "wmape": 23.02, "r2": 0.8928},
-        "sar": {"mae": 68.43, "rmse": 136.38, "mape": 133.43, "wmape": 120.20, "r2": -2.693},
     }
 
 
@@ -235,11 +266,11 @@ def load_2025_predictions() -> pd.DataFrame:
         RESULTS_DIR / "validation_2025" / "2025_predictions.csv",
         parse_dates=["week_start_date"],
     )
-    return df  # columns: week_start_date, drug_name, total_quantity, xgb_pred, hw_pred, sarima_pred, ...
+    return df  # columns: week_start_date, drug_name, total_quantity, xgb_pred, hw_pred, ...
 
 
 def load_2025_per_drug() -> pd.DataFrame:
-    """Load 2025 per-drug metric comparison (XGBoost vs HW vs SARIMA)."""
+    """Load 2025 per-drug metric comparison (XGBoost vs HW)."""
     return pd.read_csv(RESULTS_DIR / "validation_2025" / "2025_per_drug_comparison.csv")
 
 
@@ -281,7 +312,6 @@ def build_2025_comparison() -> pd.DataFrame:
             "Status":         status,
             "Winner":         str(r.get("Winner", "")),
             "HW_R2":          round(float(r.get("HW_R2", 0)), 4),
-            "SAR_MAE":        round(float(r.get("SAR_MAE", 0)), 2),
         })
     return pd.DataFrame(rows)
 
@@ -497,13 +527,10 @@ def generate_forecast(drug_name: str, forecast_date) -> dict:
     seasonal_avg = float(same_week.mean()) if len(same_week) > 0 else float(past["total_quantity"].mean())
     recent_avg   = float(past["total_quantity"].tail(4).mean())
 
-    # Confidence range: ± 2 × 2018 MAE for this drug
-    try:
-        per_drug = load_2018_per_drug()
-        row      = per_drug[per_drug["Drug"] == drug_name]
-        mae_2018 = float(row["MAE"].iloc[0]) if len(row) > 0 else 2.0
-    except Exception:
-        mae_2018 = 2.0
+    # Confidence range: tier-adjusted width using 2025 per-drug MAE
+    mae_2018 = XGB_MAE_BY_DRUG.get(drug_name, 2.0)
+    tier     = CONFIDENCE_TIERS.get(drug_name, "Medium")
+    mult     = INTERVAL_MULTIPLIERS.get(tier, 2.0)
 
     return {
         "drug":              drug_name,
@@ -511,12 +538,13 @@ def generate_forecast(drug_name: str, forecast_date) -> dict:
         "volume_segment":    VOLUME_SEGMENTS.get(drug_name, "Medium"),
         "date":              str(pd.Timestamp(forecast_date).date()),
         "prediction":        prediction,
-        "lower_bound":       max(0.0, round(prediction - 2 * mae_2018, 2)),
-        "upper_bound":       round(prediction + 2 * mae_2018, 2),
+        "lower_bound":       max(0.0, round(prediction - mult * mae_2018, 2)),
+        "upper_bound":       round(prediction + mult * mae_2018, 2),
         "seasonal_avg":      round(seasonal_avg, 2),
         "recent_avg":        round(recent_avg, 2),
         "mae_2018":          mae_2018,
         "model_used":        "XGBoost",
+        "confidence_tier":   tier,
         "error":             None,
     }
 

@@ -100,13 +100,6 @@
                             <td class="text-muted small">Backup method average weekly error — lower is better</td>
                         </tr>
                         {% endif %}
-                        {% if metrics.SAR_MAE %}
-                        <tr>
-                            <td>Third Method Error</td>
-                            <td><strong class="text-danger">{{ metrics.SAR_MAE }} units</strong></td>
-                            <td class="text-muted small">Third method average weekly error</td>
-                        </tr>
-                        {% endif %}
                         {% if metrics.MAPE %}
                         <tr>
                             <td>Error Percentage</td>
