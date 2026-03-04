@@ -528,7 +528,7 @@ document.querySelectorAll('.kpi-bar-fill[data-width]').forEach(function(el) {
     const drugs     = raw.map(r => r.Drug);
     const mae18     = raw.map(r => parseFloat(r.MAE_2018) || 0);
     const mae19     = raw.map(r => parseFloat(r.MAE_2019) || 0);
-    const threshold = {{ mae_threshold }};
+    const threshold = parseFloat('{{ mae_threshold }}');
 
     const trace1 = {
         type: 'bar',
