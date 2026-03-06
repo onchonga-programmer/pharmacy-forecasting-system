@@ -106,13 +106,13 @@
 
                 <div class="row g-2 mb-3">
                     <div class="col-6">
-                        <label class="form-label fw-semibold small">Unit Cost (£)</label>
+                        <label class="form-label fw-semibold small">Unit Cost (KSh)</label>
                         <input type="number" name="unit_cost" class="form-control form-control-sm"
                                min="0.01" step="0.01"
                                value="{{ form_data.unit_cost|default:'10.00' }}" required>
                     </div>
                     <div class="col-6">
-                        <label class="form-label fw-semibold small">Order Cost (£/order)</label>
+                        <label class="form-label fw-semibold small">Order Cost (KSh/order)</label>
                         <input type="number" name="order_cost" class="form-control form-control-sm"
                                min="0" step="0.01"
                                value="{{ form_data.order_cost|default:'50.00' }}" required>
@@ -267,10 +267,10 @@
                 <div class="col-sm-6">
                     <div class="p-3 rounded text-center" style="background:#f0faf0;">
                         <div style="font-size:2rem; font-weight:800; color:#198754;">
-                            £{{ result.order_value }}
+                            KSh {{ result.order_value }}
                         </div>
                         <div class="text-muted" style="font-size:.8rem;">Estimated Order Value</div>
-                        <div class="text-muted" style="font-size:.72rem;">{{ result.suggested_order }} units × £{{ result.unit_cost }}/unit</div>
+                        <div class="text-muted" style="font-size:.72rem;">{{ result.suggested_order }} units × KSh {{ result.unit_cost }}/unit</div>
                     </div>
                 </div>
             </div>
@@ -327,7 +327,7 @@
                 <div class="formula-box">
                     <strong>Economic Order Quantity (EOQ)</strong><br>
                     EOQ = √(2 × D × S / H)<br>
-                    <span class="text-muted">D = {{ result.annual_demand|floatformat:0 }} units/year  |  S = £{{ result.order_cost }}/order  |  H = £{{ result.unit_cost }} × {{ result.holding_cost_pct }}% = £{% widthratio result.unit_cost 100 result.holding_cost_pct %}/unit/year</span>
+                    <span class="text-muted">D = {{ result.annual_demand|floatformat:0 }} units/year  |  S = KSh {{ result.order_cost }}/order  |  H = KSh {{ result.unit_cost }} × {{ result.holding_cost_pct }}% = KSh {% widthratio result.unit_cost 100 result.holding_cost_pct %}/unit/year</span>
                 </div>
                 {% endif %}
             </div>

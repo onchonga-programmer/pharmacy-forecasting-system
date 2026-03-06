@@ -642,8 +642,8 @@ def compute_inventory_recommendation(
     current_stock     : units currently on hand
     lead_time_weeks   : weeks from placing order to delivery
     service_level_pct : desired service level (90 / 95 / 98 / 99)
-    unit_cost         : purchase cost per unit (£)
-    order_cost        : fixed cost per order (£)  — used in EOQ formula
+    unit_cost         : purchase cost per unit (KSh)
+    order_cost        : fixed cost per order (KSh)  — used in EOQ formula
     holding_cost_pct  : annual holding cost as % of unit cost (e.g. 25 = 25 %)
 
     Returns
