@@ -7,11 +7,20 @@
 {% endblock %}
 
 {% block content %}
+<!-- Print-only report header -->
+<div class="print-header">
+    <span class="ph-title"><i class="bi bi-capsule-pill me-2"></i>Pharmacy Forecast System — Drug Performance Report</span>
+    <span class="ph-meta">Drug: {{ selected_drug }} &nbsp;|&nbsp; Year: {{ selected_year }}<br>Generated: <span id="rpt-date-results"></span></span>
+</div>
+
 <div class="d-flex align-items-center justify-content-between mb-3">
     <div>
         <h4 class="mb-0 fw-bold">Results &amp; Charts</h4>
         <small class="text-muted">Compare real sales figures against what the system predicted — pick a drug and year below</small>
     </div>
+    <button class="btn btn-outline-secondary pdf-export-btn" onclick="printPageAsPDF(['main-chart'])">
+        <i class="bi bi-file-earmark-pdf me-1"></i>Export PDF
+    </button>
 </div>
 
 <!-- ── Selector form ──────────────────────────────────────────────────── -->
@@ -204,4 +213,7 @@ const chartData = JSON.parse('{{ chart_json|escapejs }}');
 Plotly.newPlot('main-chart', chartData.data, chartData.layout, {responsive: true, displayModeBar: true});
 </script>
 {% endif %}
+<script>
+document.getElementById('rpt-date-results') && (document.getElementById('rpt-date-results').textContent = new Date().toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'}));
+</script>
 {% endblock %}

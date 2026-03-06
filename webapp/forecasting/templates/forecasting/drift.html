@@ -7,11 +7,20 @@
 {% endblock %}
 
 {% block content %}
+<!-- Print-only report header -->
+<div class="print-header">
+    <span class="ph-title"><i class="bi bi-capsule-pill me-2"></i>Pharmacy Forecast System — Forecast Performance Report</span>
+    <span class="ph-meta">2025 Accuracy Analysis<br>Generated: <span id="rpt-date-drift"></span></span>
+</div>
+
 <div class="d-flex align-items-center justify-content-between mb-3">
     <div>
         <h4 class="mb-0 fw-bold">Forecast Performance</h4>
         <small class="text-muted">How well the system predicted drug demand in 2025</small>
     </div>
+    <button class="btn btn-outline-secondary pdf-export-btn" onclick="printPageAsPDF(['drift-chart'])">
+        <i class="bi bi-file-earmark-pdf me-1"></i>Export PDF
+    </button>
 </div>
 
 <!-- ── Alert banner ───────────────────────────────────────────────────── -->
@@ -222,6 +231,9 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>
+document.getElementById('rpt-date-drift') && (document.getElementById('rpt-date-drift').textContent = new Date().toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'}));
+</script>
 <script>
 // ── Render drift chart then add threshold line ────────────────────────────────
 const driftData = JSON.parse('{{ drift_chart|escapejs }}');

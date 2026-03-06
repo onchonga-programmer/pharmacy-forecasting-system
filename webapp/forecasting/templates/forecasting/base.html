@@ -193,6 +193,53 @@
         .chart-card h6, .table-card h6 {
             font-size: .875rem; font-weight: 600; color: #0f172a;
         }
+
+        /* ── Print / PDF export ─────────────────────────────────────── */
+        .pdf-export-btn {
+            font-size: .8rem;
+            border-radius: 8px;
+            padding: .3rem .85rem;
+        }
+        @media print {
+            /* Hide chrome */
+            .sidebar, .topbar, .pdf-export-btn,
+            .btn-outline-primary, .btn-outline-secondary,
+            .btn-outline-warning, .btn-primary,
+            .no-print, form button[type="submit"],
+            .alert a, [data-bs-toggle] { display: none !important; }
+
+            /* Full-width layout */
+            .main-wrapper { margin-left: 0 !important; }
+            .content { padding: .5rem !important; }
+
+            /* Cards look clean on paper */
+            .chart-card, .metric-card, .table-card {
+                box-shadow: none !important;
+                border: 1px solid #d0d7de !important;
+                break-inside: avoid;
+            }
+
+            /* Tables: no overflow clipping */
+            .table-responsive { overflow: visible !important; }
+
+            /* Smaller body text */
+            body { font-size: 10.5pt !important; background: #fff !important; }
+
+            /* Print report header */
+            .print-header {
+                display: flex !important;
+                align-items: center;
+                justify-content: space-between;
+                border-bottom: 2px solid #0284c7;
+                padding-bottom: .5rem;
+                margin-bottom: 1rem;
+            }
+            .print-header .ph-title { font-size: 13pt; font-weight: 700; color: #0f172a; }
+            .print-header .ph-meta  { font-size: 9pt; color: #64748b; text-align: right; }
+        }
+
+        /* Hidden on screen; visible only when printing */
+        .print-header { display: none; }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -292,5 +339,40 @@
     });
 </script>
 {% block extra_js %}{% endblock %}
+<script>
+/**
+ * printPageAsPDF(chartIds)
+ * Converts named Plotly chart divs to static PNG images, triggers the browser
+ * print dialog (File → Save as PDF), then restores the live charts.
+ *
+ * @param {string[]} chartIds  - IDs of Plotly chart container divs (may be empty).
+ */
+function printPageAsPDF(chartIds) {
+    chartIds = chartIds || [];
+    var snapshotMap = {};
+    var promises = chartIds.map(function(id) {
+        var el = document.getElementById(id);
+        if (!el || !window.Plotly) return Promise.resolve();
+        return Plotly.toImage(el, {format:'png', width: el.offsetWidth || 800, height: el.offsetHeight || 400})
+            .then(function(dataUrl) {
+                snapshotMap[id] = { el: el, originalHTML: el.innerHTML };
+                var img = document.createElement('img');
+                img.src = dataUrl;
+                img.style.cssText = 'width:100%;height:auto;display:block;';
+                el.innerHTML = '';
+                el.appendChild(img);
+            });
+    });
+    Promise.all(promises).then(function() {
+        window.print();
+        // Restore charts after print dialog closes
+        setTimeout(function() {
+            Object.keys(snapshotMap).forEach(function(id) {
+                snapshotMap[id].el.innerHTML = snapshotMap[id].originalHTML;
+            });
+        }, 1500);
+    });
+}
+</script>
 </body>
 </html>
