@@ -220,11 +220,15 @@ def load_2018_per_drug() -> pd.DataFrame:
     return pd.read_csv(RESULTS_DIR / "xgboost" / "xgboost_results.csv")
 
 
-def load_2019_comparison() -> pd.DataFrame:
-    df = pd.read_csv(RESULTS_DIR / "validation_2019" / "2019_per_drug_comparison.csv")
-    # Rename Change_% → Change_Percent: % symbol breaks Django template variable lookup
-    df = df.rename(columns={"Change_%": "Change_Percent"})
+def load_2025_comparison() -> pd.DataFrame:
+    """Load 2025 validation (out-of-sample test period) per-drug comparison."""
+    df = pd.read_csv(RESULTS_DIR / "validation_2025" / "2025_per_drug_comparison.csv")
     return df
+
+
+def load_2019_comparison() -> pd.DataFrame:
+    """Legacy: alias for 2025 comparison for backward compatibility."""
+    return load_2025_comparison()
 
 
 def load_2018_predictions() -> pd.DataFrame:
@@ -233,12 +237,21 @@ def load_2018_predictions() -> pd.DataFrame:
     return df  # columns: drug_name, week_start_date, actual, xgb_pred
 
 
+def load_2025_predictions() -> pd.DataFrame:
+    """Load 2025 validation (out-of-sample test period) predictions."""
+    df = pd.read_csv(
+        RESULTS_DIR / "validation_2025" / "2025_predictions.csv",
+        parse_dates=["week_start_date"],
+    )
+    return df
+
+
 def load_2019_predictions() -> pd.DataFrame:
-    df = pd.read_csv(RESULTS_DIR / "validation_2019" / "2019_predictions.csv",
-                     parse_dates=["week_start_date"])
-    # Normalise column names to match 2018 format
-    df = df.rename(columns={"total_quantity": "actual", "predicted": "xgb_pred"})
-    return df  # columns: week_start_date, drug_name, actual, xgb_pred, ...
+    """Legacy: Load 2019 validation (now returns 2025 data)."""
+    df = load_2025_predictions()
+    # Normalise column names to match old format for backward compatibility
+    df = df.rename(columns={"total_quantity": "actual"})
+    return df
 
 
 def load_quarterly_analysis() -> pd.DataFrame:
@@ -272,6 +285,11 @@ def load_2025_per_drug() -> pd.DataFrame:
 def load_2025_quarterly() -> pd.DataFrame:
     """Load 2025 quarterly breakdown for all three models."""
     return pd.read_csv(RESULTS_DIR / "validation_2025" / "2025_quarterly_analysis.csv")
+
+
+def load_2025_per_drug() -> pd.DataFrame:
+    """Load 2025 per-drug metric comparison (XGBoost vs Holt-Winters)."""
+    return pd.read_csv(RESULTS_DIR / "validation_2025" / "2025_per_drug_comparison.csv")
 
 
 def build_2025_comparison() -> pd.DataFrame:
