@@ -1245,6 +1245,16 @@ The notebooks must be run in the following order:
    is the primary model; Holt-Winters is used automatically for N05C and N02BA
    (low-volume, irregular demand drugs).
 
+    Model Selection Rationale:
+    Holt-Winters achieved the lowest absolute error (MAE=13.11) and is
+    recommended as the interpretable fallback model for stakeholders who
+    require simplicity and transparency. XGBoost is recommended as the
+    primary production model due to its competitive accuracy (MAE=14.29,
+    MAPE=28.54%), strong R² of 0.877, and its ability to incorporate
+    external features and adapt to demand shifts - capabilities that are
+    critical for a real pharmacy forecasting system. SARIMA was eliminated
+    due to poor generalisation on this dataset.
+
    NOTE: Original 2018 results (MAE=11.45) were derived from a 4-year training
    set. After retraining on 10 years, the production model is now evaluated
    on 2025 data. The earlier 2018/2019 results remain valid as an academic
