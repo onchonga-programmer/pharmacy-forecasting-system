@@ -1,9 +1,4 @@
-"""
-Tests for the Pharmacy Forecasting System webapp.
 
-Run with:
-    python manage.py test forecasting
-"""
 
 from django.test import TestCase, Client
 from django.urls import reverse

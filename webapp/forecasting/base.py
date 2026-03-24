@@ -1,12 +1,4 @@
-"""
-base.py — Shared utilities for the Pharmacy Forecasting Django app.
 
-Provides:
-  - Formatting helpers used in views and templates
-  - Navigation/page metadata
-  - CSV template generator for batch forecast uploads
-  - Drift status evaluation helpers
-"""
 
 from datetime import date, timedelta
 import io

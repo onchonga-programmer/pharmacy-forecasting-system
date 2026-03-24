@@ -1,7 +1,4 @@
-"""
-Views for the Pharmacy Forecasting System Django app.
-Pages: Dashboard, Results, Live Forecast, Drift Monitor.
-"""
+
 
 import json
 import traceback
