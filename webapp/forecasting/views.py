@@ -81,7 +81,7 @@ def dashboard(request):
             "mae_2019":      mae_hw,           # Backup model (Holt-Winters) MAE on 2025 test
             "mape_2019":     mape_hw,          # Backup model MAPE on 2025 test
             "r2_2019":       hw["r2"],         # Backup model R² on 2025 test
-            "pct_change":    pct_change,       # % difference HW vs XGB on 2025 test
+            "pct_change":    pct_change,     
             "mae_threshold": mae_threshold,
             "drugs_drifted": drugs_drifted,
             "drugs_stable":  drugs_stable,
@@ -100,139 +100,66 @@ def dashboard(request):
 
 def results(request):
     selected_drug = request.GET.get("drug", "M01AB")
-    selected_year = request.GET.get("year", "2025")
+    selected_year = "2025"
 
     try:
-        if selected_year == "2025":
-            preds      = ml_engine.load_2025_predictions()
-            drug_preds = preds[preds["drug_name"] == selected_drug].sort_values("week_start_date")
+        preds      = ml_engine.load_2025_predictions()
+        drug_preds = preds[preds["drug_name"] == selected_drug].sort_values("week_start_date")
 
-            dates    = drug_preds["week_start_date"].dt.strftime("%Y-%m-%d").tolist()
-            actual   = drug_preds["total_quantity"].tolist()
-            xgb_pred = drug_preds["xgb_pred"].tolist()
-            hw_pred  = drug_preds["hw_pred"].tolist()
+        dates    = drug_preds["week_start_date"].dt.strftime("%Y-%m-%d").tolist()
+        actual   = drug_preds["total_quantity"].tolist()
+        xgb_pred = drug_preds["xgb_pred"].tolist()
+        hw_pred  = drug_preds["hw_pred"].tolist()
 
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=dates, y=actual,
-                mode="lines+markers", name="Actual Sales",
-                line=dict(color="#212529", width=2), marker=dict(size=5),
-            ))
-            fig.add_trace(go.Scatter(
-                x=dates, y=xgb_pred,
-                mode="lines+markers", name="Forecast",
-                line=dict(color="#0d6efd", width=2, dash="dash"), marker=dict(size=4),
-            ))
-            fig.add_trace(go.Scatter(
-                x=dates, y=hw_pred,
-                mode="lines+markers", name="Backup Method",
-                line=dict(color="#198754", width=2, dash="dot"), marker=dict(size=4),
-            ))
-            fig.update_layout(
-                title=dict(
-                    text=f"{selected_drug} — Actual Sales vs Forecast (2025)",
-                    font=dict(size=15),
-                ),
-                xaxis_title="Week",
-                yaxis_title="Sales Quantity (units)",
-                template="plotly_white",
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                height=420,
-                margin=dict(l=40, r=40, t=60, b=40),
-                hovermode="x unified",
-            )
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=dates, y=actual,
+            mode="lines+markers", name="Actual Sales",
+            line=dict(color="#212529", width=2), marker=dict(size=5),
+        ))
+        fig.add_trace(go.Scatter(
+            x=dates, y=xgb_pred,
+            mode="lines+markers", name="Forecast",
+            line=dict(color="#0d6efd", width=2, dash="dash"), marker=dict(size=4),
+        ))
+        fig.add_trace(go.Scatter(
+            x=dates, y=hw_pred,
+            mode="lines+markers", name="Backup Method",
+            line=dict(color="#198754", width=2, dash="dot"), marker=dict(size=4),
+        ))
+        fig.update_layout(
+            title=dict(
+                text=f"{selected_drug} — Actual Sales vs Forecast (2025)",
+                font=dict(size=15),
+            ),
+            xaxis_title="Week",
+            yaxis_title="Sales Quantity (units)",
+            template="plotly_white",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            height=420,
+            margin=dict(l=40, r=40, t=60, b=40),
+            hovermode="x unified",
+        )
 
-            per_drug = ml_engine.load_2025_per_drug()
-            row = per_drug[per_drug["Drug"] == selected_drug]
-            if len(row) > 0:
-                r = row.iloc[0]
-                metrics = {
-                    "MAE":    round(float(r["XGB_MAE"]), 2),
-                    "MAPE":   round(float(r["XGB_WMAPE"]), 2),
-                    "R2":     round(float(r["XGB_R2"]), 4),
-                    "HW_MAE": round(float(r["HW_MAE"]), 2),
-                    "HW_R2":  round(float(r["HW_R2"]), 4),
-                    "Winner": str(r.get("Winner", "")),
-                }
-            else:
-                metrics = {}
-
-        elif selected_year == "2018":
-            preds      = ml_engine.load_2018_predictions()
-            drug_preds = preds[preds["drug_name"] == selected_drug].sort_values("week_start_date")
-            dates     = drug_preds["week_start_date"].dt.strftime("%Y-%m-%d").tolist()
-            actual    = drug_preds["actual"].tolist()
-            predicted = drug_preds["xgb_pred"].tolist()
-
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=dates, y=actual, mode="lines+markers",
-                name="Actual Sales", line=dict(color="#0d6efd", width=2), marker=dict(size=5)))
-            fig.add_trace(go.Scatter(x=dates, y=predicted, mode="lines+markers",
-                name="Forecast", line=dict(color="#fd7e14", width=2, dash="dash"),
-                marker=dict(size=5)))
-            fig.update_layout(
-                title=dict(text=f"{selected_drug} — Actual vs Forecast (2018)", font=dict(size=15)),
-                xaxis_title="Week", yaxis_title="Sales Quantity (units)",
-                template="plotly_white",
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                height=420, margin=dict(l=40, r=40, t=60, b=40), hovermode="x unified",
-            )
-            metrics_df = ml_engine.load_2018_per_drug()
-            row = metrics_df[metrics_df["Drug"] == selected_drug]
-            metrics = row.iloc[0].to_dict() if len(row) > 0 else {}
-
-        else:  # default to 2025 if invalid year selected
-            selected_year = "2025"
-            preds      = ml_engine.load_2025_predictions()
-            drug_preds = preds[preds["drug_name"] == selected_drug].sort_values("week_start_date")
-            dates    = drug_preds["week_start_date"].dt.strftime("%Y-%m-%d").tolist()
-            actual   = drug_preds["total_quantity"].tolist()
-            xgb_pred = drug_preds["xgb_pred"].tolist()
-            hw_pred  = drug_preds["hw_pred"].tolist()
-
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=dates, y=actual,
-                mode="lines+markers", name="Actual Sales",
-                line=dict(color="#212529", width=2), marker=dict(size=5),
-            ))
-            fig.add_trace(go.Scatter(
-                x=dates, y=xgb_pred,
-                mode="lines+markers", name="Forecast",
-                line=dict(color="#0d6efd", width=2, dash="dash"), marker=dict(size=4),
-            ))
-            fig.add_trace(go.Scatter(
-                x=dates, y=hw_pred,
-                mode="lines+markers", name="Backup Method",
-                line=dict(color="#198754", width=2, dash="dot"), marker=dict(size=4),
-            ))
-            fig.update_layout(
-                title=dict(text=f"{selected_drug} — Actual Sales vs Forecast (2025)", font=dict(size=15)),
-                xaxis_title="Week", yaxis_title="Sales Quantity (units)",
-                template="plotly_white",
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                height=420, margin=dict(l=40, r=40, t=60, b=40), hovermode="x unified",
-            )
-            per_drug = ml_engine.load_2025_per_drug()
-            row = per_drug[per_drug["Drug"] == selected_drug]
-            if len(row) > 0:
-                r = row.iloc[0]
-                metrics = {
-                    "MAE":    round(float(r["XGB_MAE"]), 2),
-                    "MAPE":   round(float(r["XGB_WMAPE"]), 2),
-                    "R2":     round(float(r["XGB_R2"]), 4),
-                    "HW_MAE": round(float(r["HW_MAE"]), 2),
-                    "HW_R2":  round(float(r["HW_R2"]), 4),
-                    "Winner": str(r.get("Winner", "")),
-                }
-            else:
-                metrics = {}
+        per_drug = ml_engine.load_2025_per_drug()
+        row = per_drug[per_drug["Drug"] == selected_drug]
+        if len(row) > 0:
+            r = row.iloc[0]
+            metrics = {
+                "MAE":    round(float(r["XGB_MAE"]), 2),
+                "MAPE":   round(float(r["XGB_WMAPE"]), 2),
+                "R2":     round(float(r["XGB_R2"]), 4),
+                "HW_MAE": round(float(r["HW_MAE"]), 2),
+                "HW_R2":  round(float(r["HW_R2"]), 4),
+                "Winner": str(r.get("Winner", "")),
+            }
+        else:
+            metrics = {}
 
         context = {
             "selected_drug": selected_drug,
             "selected_year": selected_year,
             "drug_list":     ml_engine.DRUG_LIST,
-            "year_options":  [("2025", "2025 Out-of-Sample Test"), ("2018", "2018 Validation")],
             "chart_json":    _fig_json(fig),
             "metrics":       metrics,
             "page":          "results",
@@ -243,7 +170,6 @@ def results(request):
             "selected_drug": selected_drug,
             "selected_year": selected_year,
             "drug_list":     ml_engine.DRUG_LIST,
-            "year_options":  [("2025", "2025 Out-of-Sample Test"), ("2018", "2018 Validation")],
             "page":          "results",
         }
 
