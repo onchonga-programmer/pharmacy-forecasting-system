@@ -75,13 +75,13 @@ def dashboard(request):
         mae_threshold = round(mae_xgb * 1.20, 2)
 
         context = {
-            \"mae_2018\":      mae_xgb,          # Primary model (XGBoost) MAE on 2025 test
-            \"mape_2018\":     mape_xgb,         # Primary model MAPE on 2025 test
-            \"r2_2018\":       r2_xgb,           # Primary model R² on 2025 test
-            \"mae_2019\":      mae_hw,           # Backup model (Holt-Winters) MAE on 2025 test
-            \"mape_2019\":     mape_hw,          # Backup model MAPE on 2025 test
-            \"r2_2019\":       hw[\"r2\"],        # Backup model R² on 2025 test
-            \"pct_change\":    pct_change,       # % difference HW vs XGB on 2025 test
+            "mae_2018":      mae_xgb,          # Primary model (XGBoost) MAE on 2025 test
+            "mape_2018":     mape_xgb,         # Primary model MAPE on 2025 test
+            "r2_2018":       r2_xgb,           # Primary model R² on 2025 test
+            "mae_2019":      mae_hw,           # Backup model (Holt-Winters) MAE on 2025 test
+            "mape_2019":     mape_hw,          # Backup model MAPE on 2025 test
+            "r2_2019":       hw["r2"],         # Backup model R² on 2025 test
+            "pct_change":    pct_change,       # % difference HW vs XGB on 2025 test
             "mae_threshold": mae_threshold,
             "drugs_drifted": drugs_drifted,
             "drugs_stable":  drugs_stable,
