@@ -1,1699 +1,213 @@
-================================================================================
-        PHARMACY SALES FORECASTING SYSTEM — PROJECT DOCUMENTATION
-================================================================================
-Document Type  : Technical Project Record
-Project        : Final Year Project — Pharmacy Sales Forecasting System
-Date Created   : February 2026
-Author         : Brenda
---------------------------------------------------------------------------------
-
-
-================================================================================
-TABLE OF CONTENTS
-================================================================================
-
-  1.  Project Overview
-  2.  Dataset Description
-  3.  Project Folder Structure
-  4.  Data Cleaning & Preprocessing
-  5.  Exploratory Data Analysis (EDA)
-  6.  Feature Engineering
-  7.  Temporal Train / Validate / Test Split Strategy
-  8.  Baseline Models
-  9.  SARIMA Model
-  10. XGBoost Model
-  11. Model Validation — 2019 Out-of-Sample Test
-  12. Key Results Summary
-  13. Model Drift Analysis
-  14. Bugs Found & Fixed During Development
-  15. File & Output Inventory
-  16. How to Re-run the Full Pipeline
-  17. Key Conclusions
-  18. XGBoost Retraining — Extended Dataset (2014–2024)
-  19. 2025 Out-of-Sample Validation Results
-  20. SARIMA Removal from Production System
-  21. Web Application Development
-  22. UI/UX Design — Pharmacist-Friendly Interface
-
-
-================================================================================
-1. PROJECT OVERVIEW
-================================================================================
-
-This project builds a machine-learning-based demand forecasting system for
-pharmacy sales data. The goal is to predict weekly drug sales quantities across
-8 drug categories (identified by ATC codes), and to evaluate how well a trained
-model generalises to future, unseen time periods.
-
-The system implements and compares three classes of forecasting models:
-  - Statistical baseline models (Naive, Seasonal Naive, SES, MA-4, WMA-4,
-    Holt-Winters)
-  - SARIMA (Seasonal AutoRegressive Integrated Moving Average)
-  - XGBoost (gradient-boosted decision trees with engineered time-series
-    features)
-
-The final pipeline follows a strict 3-way temporal split:
-  - TRAINING    : 2014 – 2017  (model learns from historical patterns)
-  - VALIDATION  : 2018         (hyperparameter tuning and model selection)
-  - FINAL TEST  : 2019         (out-of-sample generalisation test)
-
-This design ensures no data leakage and provides an academically rigorous
-evaluation of real-world model performance.
-
-
-================================================================================
-2. DATASET DESCRIPTION
-================================================================================
-
-Source file : data/raw/salesweekly.csv
-
-  - Weekly pharmacy sales records spanning 2014 to October 2019
-  - 8 drug categories (ATC classification system):
-
-      ATC Code | Category Description        | Volume Segment
-      ---------+-----------------------------+---------------
-      M01AB    | Anti-inflammatory/anti-rheum| Medium Volume
-      M01AE    | Anti-inflammatory/anti-rheum| Medium Volume
-      N02BA    | Analgesics (salicylic acid)  | Medium Volume
-      N02BE    | Analgesics (paracetamol)    | High Volume
-      N05B     | Anxiolytics                 | High Volume
-      N05C     | Hypnotics/Sedatives         | Low Volume
-      R03      | Obstructive airway drugs    | Medium Volume
-      R06      | Antihistamines              | Medium Volume
-
-  - Original data covers approximately 285 weeks (Jan 2014 – Oct 2019)
-  - 2019 data is partial (January – October, ~40 weeks)
-  - Extended dataset (after retraining): 2014 – end of 2024 (~523 weeks)
-    Used to retrain the XGBoost and Holt-Winters models with 10 full years
-    of sales history; the full year 2025 (51 weeks per drug) was held out
-    as the final out-of-sample test set for the production system.
-  - Target variable: weekly sales quantity (units sold)
-
-ATC Code Structure (used for encoding):
-  - First character = ATC Main Group (M = Musculo-skeletal, N = Nervous system,
-    R = Respiratory)
-  - This main group character was used as a categorical encoding feature
-
-
-================================================================================
-3. PROJECT FOLDER STRUCTURE
-================================================================================
-
-PharmacyForecastingSystem/
-│
-├── config/                     — Database configuration (SQLAlchemy)
-│   └── database_config.py
-│
-├── data/
-│   ├── raw/
-│   │   └── salesweekly.csv     — Original raw data
-│   ├── processed/              — Cleaned and feature-engineered CSVs
-│   │   ├── sales_cleaned.csv
-│   │   ├── sales_cleaned_no_outliers.csv
-│   │   ├── sales_modeling.csv
-│   │   ├── train_xgboost.csv   — XGBoost training set (2014-2017)
-│   │   ├── test_xgboost.csv    — XGBoost validation set (2018)
-│   │   ├── train_sarima.csv
-│   │   ├── test_sarima.csv
-│   │   ├── train_baseline.csv
-│   │   └── test_baseline.csv
-│   └── results/
-│       ├── baseline_models/
-│       │   ├── baseline_summary.csv
-│       │   └── baseline_detailed_results.csv
-│       ├── sarima/
-│       │   ├── sarima_results.csv
-│       │   └── sarima_predictions.csv
-│       ├── xgboost/
-│       │   ├── xgboost_final_model.pkl  — Saved trained model
-│       │   ├── xgboost_model.json
-│       │   ├── xgboost_results.csv      — Per-drug 2018 metrics
-│       │   ├── xgboost_predictions.csv
-│       │   ├── feature_importance.csv
-│       │   ├── validation_2018_metrics.json — Overall 2018 metrics (JSON)
-│       │   └── best_params.pkl
-│       └── validation_2019/
-│           ├── 2019_predictions.csv
-│           ├── 2019_per_drug_comparison.csv
-│           └── 2019_quarterly_analysis.csv
-│
-├── notebooks/
-│   ├── data_cleaning.ipynb
-│   ├── data_validation.ipynb
-│   ├── pharmacy_sales_eda.ipynb
-│   ├── pharmacy_sales_feature_engineering.ipynb   — Step 3
-│   ├── pharmacy_sales_baseline_models.ipynb       — Step 4
-│   ├── pharmacy_sarima_model.ipynb                — Step 5
-│   ├── pharmacy_xgboost_model.ipynb               — Step 6
-│   └── model_validation_2019.ipynb                — Step 7
-│
-├── src/                        — Source modules (data processing, models, API)
-├── database/                   — SQL schema and seed files
-├── documentation/
-│   └── project_documentation.txt   — THIS FILE
-├── requirements.txt
-└── README.md
-
-
-================================================================================
-4. DATA CLEANING & PREPROCESSING
-================================================================================
-
-Notebook: notebooks/data_cleaning.ipynb
-
-Steps performed:
-  1. Loaded raw CSV (salesweekly.csv) into a pandas DataFrame
-  2. Parsed and standardised the 'datum' (date) column to datetime format
-  3. Renamed columns to English equivalents where needed
-  4. Checked for and handled missing values
-  5. Identified and handled outliers using IQR-based method (Cap)
-  6. Reshaped data from wide format (one column per drug) to long format
-     (drug_name column + quantity column) for modelling compatibility
-  7. Saved two cleaned versions:
-       - sales_cleaned.csv           (capped data, all years)
-       - sales_cleaned_no_outliers.csv (outliers removed, all years)
-  8. PIPELINE FORK — two separate modeling files are produced:
-
-     SARIMA / Baseline branch (capped):
-       sales_modeling_sarima.csv  — complete years, outliers capped at IQR
-       Reason: SARIMA and Holt-Winters are linear models; extreme values
-       directly bias their coefficient estimates and seasonal amplitudes.
-       Capping prevents a few anomalous weeks from dominating the model.
-
-     XGBoost branch (uncapped, raw values):
-       sales_modeling_xgboost.csv — complete years, NO capping applied
-       Reason: XGBoost is a tree ensemble. Trees learn split thresholds
-       within the observed feature range. If training data is capped at
-       (e.g.) 99.625, the model cannot predict values above that level at
-       inference time — it cannot extrapolate beyond its training range.
-       Training on raw uncapped data lets the model learn the full demand
-       distribution (e.g., N02BE range 86–546 units/week).
-
-     sales_modeling.csv — legacy alias, mirrors the SARIMA version for
-       backward compatibility.
-
-  This fork was implemented after the 2019 validation revealed that the
-  original single-pipeline approach (capping applied to all models) caused
-  catastrophic failure for N02BE: MAE 0.17 (artefact) → 121.39 in 2019.
-  (See Bug 7 in Section 14 and the full explanation in Section 13.)
-
-Output:
-  - data/processed/sales_cleaned.csv
-  - data/processed/sales_cleaned_no_outliers.csv
-  - data/processed/sales_modeling_sarima.csv   ← SARIMA / Baseline input
-  - data/processed/sales_modeling_xgboost.csv  ← XGBoost input (uncapped)
-  - data/processed/sales_modeling.csv          ← legacy alias (= SARIMA file)
-
-
-================================================================================
-5. EXPLORATORY DATA ANALYSIS (EDA)
-================================================================================
-
-Notebook: notebooks/pharmacy_sales_eda.ipynb
-
-Analysis performed:
-  - Time series plots for each of the 8 drug categories
-  - Seasonal decomposition (trend, seasonality, residuals)
-  - Distribution plots (histograms, box plots) per drug
-  - Correlation analysis between drug sales
-  - Weekly and monthly sales patterns
-  - Identification of high/medium/low volume drug segments
-  - Identification of N02BE as a high-volume, highly volatile category
-
-Key findings:
-  - Strong weekly and annual seasonality present in most drugs
-  - N02BE (paracetamol) is the highest-volume drug with large variance
-  - R03 (respiratory) shows clear winter peaks
-  - N05C (sedatives) is low volume and intermittent
-
-
-================================================================================
-6. FEATURE ENGINEERING
-================================================================================
-
-Notebook: notebooks/pharmacy_sales_feature_engineering.ipynb
-
-Input: data/processed/sales_modeling_xgboost.csv  (raw uncapped values)
-  Note: The feature engineering notebook uses the XGBoost-specific file.
-  This ensures that lag and rolling features are computed from the full
-  uncapped demand range, matching what the model will see at inference time.
-  SARIMA uses its own pre-split file (sales_modeling_sarima.csv) directly.
-
-This notebook transforms the cleaned time-series data into a supervised machine
-learning dataset with 47+ engineered features per observation.
-
-Features created:
-
-  TIME FEATURES:
-    - month, quarter, week_of_year
-    - month_sin, month_cos        — cyclical encoding for month
-    - quarter_sin, quarter_cos    — cyclical encoding for quarter
-    - week_sin, week_cos          — cyclical encoding for week of year
-    - time_index                  — cumulative week count across all history
-                                    (NOT reset per drug; counts from data start)
-
-  LAG FEATURES (previous sales values):
-    - lag_1   — previous week
-    - lag_2   — 2 weeks ago
-    - lag_4   — 1 month ago
-    - lag_13  — 1 quarter ago
-    - lag_52  — same week last year
-
-  ROLLING WINDOW STATISTICS (computed per drug, no data leakage):
-    Windows: 4, 13, 26, 52 weeks
-    - rolling_mean_{w}
-    - rolling_std_{w}
-    - rolling_min_{w}
-    - rolling_max_{w}
-
-  EXPONENTIALLY WEIGHTED MOVING AVERAGES (EWM):
-    - ewm_mean_4, ewm_mean_13, ewm_mean_26
-
-  EXPANDING STATISTICS (computed using only historical data up to each point):
-    - expanding_mean   — running mean of all past values
-    - expanding_std    — running standard deviation
-    Note: These are calculated using ALL available history (2014 onwards),
-          ensuring no future leakage when applied in the 2019 test set.
-
-  DRUG-LEVEL ENCODING:
-    - drug_encoded     — integer label encoding of drug_name (sorted
-                         alphabetically for reproducibility)
-    - atc_main_group   — ATC main group encoding:
-                           M (Musculo-skeletal) → 0
-                           N (Nervous system)   → 1
-                           R (Respiratory)      → 2
-                         Note: Uses FIRST CHARACTER of ATC code, NOT full code
-
-  DRUG STATISTICS (per-drug summary values from full training history):
-    - drug_mean, drug_std, drug_min, drug_max, drug_cv
-
-Data Split Applied in This Notebook:
-  - All data up to 2017-12-31   → train sets  (train_xgboost.csv, etc.)
-  - All data from 2018-01-01    → test sets   (test_xgboost.csv, etc.)
-  - A label_encoders.pkl file is saved for reproducing encodings
-
-Output files:
-  - data/processed/train_xgboost.csv
-  - data/processed/test_xgboost.csv
-  - data/processed/train_sarima.csv
-  - data/processed/test_sarima.csv
-  - data/processed/train_baseline.csv
-  - data/processed/test_baseline.csv
-  - data/processed/label_encoders.pkl
-
-
-================================================================================
-7. TEMPORAL TRAIN / VALIDATE / TEST SPLIT STRATEGY
-================================================================================
-
-  ORIGINAL SPLIT (used for initial model development and leakage investigation):
-
-  ┌────────────────────────────────────────────────────────────────┐
-  │  PERIOD         │  YEARS     │  PURPOSE                       │
-  ├─────────────────┼────────────┼────────────────────────────────┤
-  │  Training Set   │ 2014–2017  │ Model learns demand patterns   │
-  │  Validation Set │ 2018       │ Hyperparameter tuning, metrics │
-  │  Test Set       │ 2019       │ Final out-of-sample evaluation │
-  └─────────────────┴────────────┴────────────────────────────────┘
-
-  PRODUCTION SPLIT (after retraining on extended dataset — see Section 18):
-
-  ┌────────────────────────────────────────────────────────────────┐
-  │  PERIOD         │  YEARS     │  PURPOSE                       │
-  ├─────────────────┼────────────┼────────────────────────────────┤
-  │  Training Set   │ 2014–2024  │ Model trained on full 10-year  │
-  │                 │ (10 years) │ history (~523 weeks per drug)  │
-  │  Test Set       │ 2025       │ Final out-of-sample evaluation │
-  │                 │ (51 weeks) │ for the production webapp      │
-  └─────────────────┴────────────┴────────────────────────────────┘
-
-  Notes on the production split:
-    - No separate validation year was used; hyperparameters were carried
-      forward from the original 2018 validation experiments
-    - SARIMA was evaluated on 2025 as a reference comparison but was
-      excluded from the production webapp due to severe performance
-      degradation (MAE=68.43 vs XGBoost=14.29; see Section 20)
-    - The 2025 test set is entirely unseen data — no decisions about model
-      architecture, features, or hyperparameters were made using 2025 data
-
-Rationale:
-  - Temporal splits are mandatory for time-series data to prevent data leakage
-  - Using full calendar years (instead of random splits or rolling windows)
-    ensures each split captures complete seasonal cycles
-  - The 2019 test set is unseen during training AND validation — providing a
-    true measure of real-world generalisation
-  - 5 full years of training data is sufficient to learn weekly, monthly, and
-    annual seasonal patterns
-  - 2019 data is partial (Jan–Oct) but this is acceptable since all 4 seasons
-    are represented across the full training history
-
-This 3-way split applies to ALL models: baseline, SARIMA, and XGBoost.
-
-
-================================================================================
-8. BASELINE MODELS
-================================================================================
-
-Notebook: notebooks/pharmacy_sales_baseline_models.ipynb
-
-Six baseline forecasting methods implemented as performance benchmarks:
-
-  Model           | Description
-  ----------------+------------------------------------------------------
-  Naive           | Forecast = last observed value
-  Seasonal Naive  | Forecast = value from same week, previous year
-  SES             | Simple Exponential Smoothing
-  MA-4            | 4-week simple moving average
-  WMA-4           | 4-week weighted moving average
-  Holt-Winters    | Exponential smoothing with trend and seasonality
-
-Overall Baseline Results (2018 validation period, all drugs combined):
-
-  Model           |  MAE   | MAPE   |  WMAPE  |   R²
-  ----------------+--------+--------+---------+---------
-  Holt-Winters    |  6.91  | 28.36% | 25.59%  | -0.387
-  WMA-4           |  8.55  | 31.96% | 28.98%  | -0.634
-  MA-4            |  8.63  | 30.84% | 28.83%  | -0.650
-  SES             |  8.79  | 33.37% | 29.34%  | -0.846
-  Naive           |  8.94  | 38.70% | 34.86%  | -1.262
-  Seasonal Naive  |  9.21  | 33.69% | 31.24%  | -1.155
-
-  Note: Negative R² values indicate that all baseline models perform worse
-  than simply predicting the mean. This highlights the difficulty of the
-  forecasting problem and confirms that more advanced models are needed.
-
-Output files:
+PHARMACY FORECASTING SYSTEM - PROJECT DOCUMENTATION
+Updated: 30 March 2026
+
+======================================================================
+1. PROJECT PURPOSE
+======================================================================
+This project forecasts weekly pharmacy demand for 8 ATC drug categories to
+support stock planning and reduce stockouts/overstock.
+
+The final system combines data science outputs (model training + validation)
+with a Django web application used by end users.
+
+Drug categories:
+M01AB, M01AE, N02BA, N02BE, N05B, N05C, R03, R06
+
+
+======================================================================
+2. DATA AND TRAINING WINDOW
+======================================================================
+Source dataset:
+- data/raw/salesweekly.csv
+
+Modeling datasets used by the application:
+- data/processed/sales_modeling.csv
+- data/processed/sales_modeling_xgboost.csv
+- data/processed/sales_modeling_sarima.csv
+
+Final temporal split used for production-level validation:
+- Training period: 2014-2024
+- Validation/Test period: 2025 (fully out-of-sample)
+
+Why this split was used:
+1. It preserves chronological order and avoids data leakage.
+2. It simulates real deployment conditions (forecasting future unseen weeks).
+3. It provides a strong test of model robustness across seasonal and demand
+   variability over a full calendar year.
+
+
+======================================================================
+3. MODELS TRAINED AND EVALUATED
+======================================================================
+Three model families were compared:
+
+A) BASELINE STATISTICAL MODELS
+- Naive, Seasonal Naive, SES, moving average variants, Holt-Winters.
+- Baseline summary files:
   - data/results/baseline_models/baseline_summary.csv
-  - data/results/baseline_models/baseline_detailed_results.csv
+  - data/results/baseline_models/best_baseline_model.txt
 
-
-================================================================================
-9. SARIMA MODEL
-================================================================================
-
-Notebook: notebooks/pharmacy_sarima_model.ipynb
-
-SARIMA (Seasonal ARIMA) models were fitted individually per drug, with
-automatic order selection (AIC-based grid search).
-
-Model orders selected per drug (auto_arima with s=52, AIC criterion):
-
-  Drug   | ARIMA Order  | Seasonal Order       | AIC      | n_train | LB_ok
-  -------+--------------+----------------------+----------+---------+-------
-  M01AB  | (1,0,1)      | (1,1,0,52)           | 1176.89  |  209    | False
-  M01AE  | (1,0,1)      | (1,1,0,52)           | 1097.57  |  209    | True
-  N02BA  | (1,0,1)      | (1,1,0,52)           | 1082.32  |  209    | True
-  N02BE  | (1,1,2)      | (0,1,0,52)           |  315.75  |  174    | True
-  N05B   | (0,0,0)      | (1,1,1,52)           |  859.10  |  149    | False
-  N05C   | (0,0,0)      | (0,1,0,52)           |  291.54  |  108    | False
-  R03    | (1,0,0)      | (1,1,0,52)           |  615.20  |  119    | False
-  R06    | (3,1,0)      | (1,1,1,52)           |  536.72  |  129    | True
-
-  Note: n_train is the post-structural-break training length. Drugs with
-  n_train < 156 weeks have fewer than 3 full seasonal cycles, making
-  s=52 unreliable. This explains the degenerate (0,0,0) orders for N05C
-  and N05B — auto_arima could not find useful AR/MA patterns.
-  LB_ok = True means residuals passed the Ljung-Box white-noise test.
-
-SARIMA Results (2018 test period, per drug, sorted by WMAPE):
-
-  Drug   | Segment |  MAE   | RMSE   | WMAPE  | MAPE   |   R²     | Beats Baseline
-  -------+---------+--------+--------+--------+--------+----------+---------------
-  N02BE  | High    |  0.42  |  1.36  |  0.42% |  0.42% |  0.0000  | ✅ Yes
-  M01AE  | Medium  |  5.23  |  6.80  | 19.99% | 21.13% | -0.3926  | ✅ Yes
-  M01AB  | Medium  |  7.86  | 10.18  | 23.30% | 25.61% | -1.0591  | ❌ No
-  N05B   | High    | 17.23  | 21.42  | 27.80% | 28.29% | -1.5876  | ❌ No
-  N02BA  | Medium  |  6.62  |  8.81  | 31.40% | 37.27% | -1.4370  | ✅ Yes
-  R06    | Medium  |  7.52  | 10.29  | 33.22% | 37.43% |  0.4187  | ❌ No
-  R03    | Medium  | 18.84  | 25.31  | 37.23% | 45.69% | -0.1314  | ❌ No
-  N05C   | Low     |  3.51  |  4.79  | 64.26% | 58.65% | -0.6376  | ✅ Yes
-
-  SARIMA beats Holt-Winters baseline (MAE=6.91) for 4/8 drugs.
-  Negative R² values indicate the model is worse than predicting the mean.
-  6/8 drugs have negative R², confirming SARIMA is not a reliable model
-  for this dataset — primarily due to insufficient data for s=52.
-
-  Key issues:
-  - N05B and R03 produced degenerate orders (0,0,0)/(1,0,0) — SARIMA gave up
-  - Short post-break training windows (108–149 weeks) = <3 annual cycles
-  - SARIMA is dominated by the seasonal differencing (D=1, s=52) in these cases
-  - XGBoost is significantly better suited to this data
-
-Output files:
+B) SARIMA
+- Per-drug SARIMA models with seasonal structure.
+- Result file:
   - data/results/sarima/sarima_results.csv
-  - data/results/sarima/sarima_predictions.csv
 
-
-================================================================================
-10. XGBOOST MODEL
-================================================================================
-
-Notebook: notebooks/pharmacy_xgboost_model.ipynb
-
-XGBoost (eXtreme Gradient Boosting) was chosen as the primary model due to:
-  - Ability to capture non-linear relationships
-  - Handles engineered tabular features well
-  - Supports time-series forecasting via lag/rolling features
-  - Strong performance on structured data
-
-Training Configuration:
-  - Training period  : 2014 – 2017 (all data up to 2017-12-31)
-  - Validation period: 2018 (full calendar year, used for tuning)
-  - Algorithm        : XGBoost Regressor
-  - Hyperparameter tuning: Grid search / cross-validated on 2018
-
-Key hyperparameters (best_params.pkl):
-  - Saved to: data/results/xgboost/best_params.pkl
-  - Best CV MAE (3-fold TimeSeriesSplit): 38.73
-  - Best params: max_depth=3, learning_rate=0.1, n_estimators=100,
-                 subsample=1.0, colsample_bytree=0.8
-
-  NOTE: Earlier runs reported CV MAE=25.72 with max_depth=7, lr=0.05,
-  n_estimators=300. That lower CV MAE was an artefact of the total_quantity_log
-  leakage (Bug 10) — the cross-validation folds still contained log(target)
-  as a feature. After removing all leakage sources, the honest CV MAE is 38.73.
-
-XGBoost 2018 Validation Results (overall, all 8 drugs):
-  Source: data/results/xgboost/validation_2018_metrics.json
-  Training period  : 2014–2017
-  Validation period: 2018
-
-  Metric  |  Value
-  --------+---------
-  MAE     |  11.45
-  MAPE    |  25.55%
-  WMAPE   |  20.55%
-  R²      |  0.9189
-
-  NOTE: Earlier documentation showed MAE=1.81, MAPE=6.23%, R²=0.9913.
-  Those were artefacts of data leakage (Bugs 9 and 10 — see Section 14).
-  The values above are the true leakage-free results.
-
-XGBoost 2018 Validation Results (per drug, sorted by MAE):
-  Source: data/results/xgboost/xgboost_results.csv
-
-  Drug   | Volume   |  MAE  |  RMSE |  MAPE  | WMAPE  |   R²
-  -------+----------+-------+-------+--------+--------+-------
-  N05C   | Low      |  2.56 |  3.54 | 34.12% | 46.84% | 0.108
-  M01AE  | Medium   |  4.87 |  6.12 | 20.02% | 18.65% |-0.128
-  N02BA  | Medium   |  4.87 |  6.25 | 26.89% | 23.10% |-0.227
-  M01AB  | Medium   |  6.11 |  7.62 | 19.11% | 18.11% |-0.154
-  R06    | Medium   |  6.80 |  9.02 | 38.52% | 30.05% | 0.554
-  N05B   | High     | 13.71 | 19.38 | 19.63% | 21.90% |-0.600
-  R03    | Medium   | 17.58 | 23.12 | 36.63% | 34.51% | 0.113
-  N02BE  | High     | 33.58 | 42.37 | 15.31% | 15.65% | 0.544
-
-Comparison with baselines (2018, all drugs):
-  Model         | MAE   | Notes
-  --------------+-------+-----------------------------------
-  Holt-Winters  |  6.91 | BEST baseline (overall MAE)
-  SARIMA (avg)  |  8.73 |
-  XGBoost       | 11.45 | beats SARIMA on MAPE (25.55% vs 31.89%)
-
-  XGBoost beats SARIMA for 6/8 individual drugs by MAE.
-  XGBoost beats Holt-Winters on MAPE (25.55% vs 28.36%).
-  Holt-Winters remains best by overall MAE on the 2018 set.
-
-Saved model files:
-  - data/results/xgboost/xgboost_final_model.pkl
+C) XGBOOST
+- Supervised model trained on engineered lag, rolling, trend, seasonal,
+  and encoded category features.
+- Main output files:
   - data/results/xgboost/xgboost_model.json
-  - data/results/xgboost/validation_2018_metrics.json
-  - data/results/xgboost/feature_importance.csv
-
-Feature Importance:
-  The top contributing features can be found in:
-  data/results/xgboost/feature_importance.csv
-
-
-================================================================================
-11. MODEL VALIDATION — 2019 OUT-OF-SAMPLE TEST
-================================================================================
-
-Notebook: notebooks/model_validation_2019.ipynb
-
-Purpose:
-  To evaluate the trained XGBoost model (trained on 2014-2017, validated on
-  2018) against completely unseen 2019 data. This is the final, definitive
-  test of model generalisation.
-
-How the 2019 test works:
-  1. The 2019 weekly sales data is loaded and feature-engineered using the
-     SAME transformations as training (lag features, rolling stats, etc.)
-  2. Expanding stats use the FULL history (2014-2019) to avoid data leakage
-  3. Drug encodings use the same sorted label encoder saved during training
-  4. ATC main group encoding: M→0, N→1, R→2
-  5. Features are passed to the saved XGBoost model for prediction
-  6. Predictions are compared to actual 2019 values
-
-Benchmark thresholds (dynamically computed):
-  - Loaded from: data/results/xgboost/validation_2018_metrics.json
-  - MAE threshold: dual — absolute MAE ≤ 3 units (PASS) / ≤ 10 units (WARN)
-                   or relative change ≤ 20% (PASS) / ≤ 50% (WARN)
-  - Prior versions used relative-only thresholds which incorrectly flagged
-    low-error results when the baseline MAE was sub-unit (leakage artefact).
-
-2019 Overall Results (all leakage fixed — clean model):
-  Source: data/results/validation_2019/2019_predictions.csv
-
-  Metric  | 2018 (Validation) | 2019 (Test) | Change
-  --------+-------------------+-------------+----------
-  MAE     |      11.45        |    12.48    |   +9.0%
-  MAPE    |      25.55%       |    29.03%   |  +13.6%
-  WMAPE   |      20.55%       |    24.02%   |    —
-  R²      |       0.9189      |     0.8663  |   -5.7%
-
-  Verdict: ✅ VALIDATION PASSED — 9% MAE degradation (within 20% threshold)
-
-  Earlier documentation showed VALIDATION FAILED with MAE 2019=18.69 (+932%).
-  Those were artefacts of data leakage (Bugs 7, 9, 10 — see Section 14).
-  The values above are the true, leakage-free out-of-sample results.
-
-2019 Per-Drug Results:
-
-  Drug   | MAE 2018 | MAE 2019 | MAPE 2019 |  R² 2019 | Notes
-  -------+----------+----------+-----------+----------+-----------
-  N05C   |    2.56  |    1.96  |   27.79%  |   0.05   | Best performer (low volume)
-  N02BA  |    4.87  |    4.79  |   22.01%  |  -0.26   | Stable
-  M01AB  |    6.11  |    6.41  |   24.89%  |  -0.07   | Slight degradation
-  R06    |    6.80  |    7.47  |   27.16%  |   0.38   | Slight degradation
-  M01AE  |    4.87  |    7.80  |   37.66%  |   0.03   | Moderate degradation
-  N05B   |   13.71  |   13.11  |   21.88%  |  -0.57   | Stable (improved)
-  R03    |   17.58  |   19.80  |   49.50%  |   0.13   | High error, volatile drug
-  N02BE  |   33.58  |   38.23  |   20.38%  |   0.58   | Worst MAE (high volume)
-
-  N02BE: model captures trend direction (R²=0.58) but absolute errors are large
-  because N02BE has the widest demand range (86–478 in 2019). A +14% MAE
-  increase from 33.58 to 38.23 is consistent with slight distribution shift.
-
-Quarterly Analysis (all drugs combined):
-
-  Quarter | MAE   | RMSE  | MAPE   | WMAPE   |  R²  | Weeks
-  --------+-------+-------+--------+---------+------+------
-  Q1 2019 | 16.60 | 31.44 | 28.37% |  24.62% | 0.88 |  12
-  Q2 2019 | 10.08 | 16.75 | 22.44% |  21.10% | 0.86 |  13
-  Q3 2019 |  9.55 | 16.91 | 25.74% |  21.20% | 0.90 |  14
-  Q4 2019 | 35.62 | 54.74 | 237.7% | 187.50% |-2.40 |   1
-
-  Q1 is higher due to N02BE's post-holiday spike (478 actual in Jan 2019).
-  Q2-Q3 improve as demand stabilises. Q4 has only 1 week (2019-10-07)
-  and is not statistically representative.
-
-Quarterly Analysis:
-  Results saved in: data/results/validation_2019/2019_quarterly_analysis.csv
-
-Output files saved:
-  - data/results/validation_2019/2019_predictions.csv
-  - data/results/validation_2019/2019_per_drug_comparison.csv
-  - data/results/validation_2019/2019_quarterly_analysis.csv
-
-
-================================================================================
-12. KEY RESULTS SUMMARY
-================================================================================
-
-Model Comparison — 2018 Validation MAE (lower is better):
-
-  Rank | Model          | MAE (2018)
-  -----+----------------+-----------
-    1  | Holt-Winters   |   6.91     ← Best by overall MAE
-    2  | WMA-4          |   8.55
-    3  | MA-4           |   8.63
-    4  | SES            |   8.79
-    5  | SARIMA (avg)   |   8.73     ← variable per drug
-    6  | Naive          |   8.94
-    7  | Seasonal Naive |   9.21
-    8  | XGBoost        |  11.45     ← highest MAE but best MAPE (25.55%)
-
-  XGBoost beats Holt-Winters on MAPE (25.55% vs 28.36%) and beats SARIMA
-  for 6/8 individual drugs on MAE. Holt-Winters leads on overall MAE due to
-  XGBoost's larger errors on N02BE and N05B (high-volume, high-variance drugs).
-
-  IMPORTANT: Earlier results showed XGBoost MAE=1.74 (or 1.81), which would
-  have ranked it #1 by a wide margin. Those results were artefacts of data
-  leakage (Bugs 9 and 10 — see Section 14). The table above reflects true,
-  leakage-free performance.
-
-XGBoost Final Performance (all leakage removed):
-  - 2018 Validation : MAE=11.45, MAPE=25.55%, R²=0.9189
-  - 2019 Final Test : MAE=12.48, MAPE=29.03%, R²=0.8663
-  - Degradation     : +9.0% MAE — within 20% threshold → ✅ VALIDATION PASSED
-
-Per-drug 2019 highlights:
-  Best : N05C (MAE=1.96 — low volume, stable demand)
-  Worst: N02BE (MAE=38.23 — high volume, wide demand range)
-  Average excluding N02BE: ~7.9 MAE
-
-──────────────────────────────────────────────────────────────────────────────
-PRODUCTION MODEL (Retrained 2014–2024, Tested on 2025 — See Sections 18 & 19)
-──────────────────────────────────────────────────────────────────────────────
-
-  Model Comparison — 2025 Overall Metrics:
-
-  Model          |  MAE   |  RMSE  |  MAPE   | WMAPE   |   R²
-  ---------------+--------+--------+---------+---------+---------
-  Holt-Winters   | 13.11  | 23.23  | 29.23%  | 23.02%  | 0.8928   ← Best by MAE
-  XGBoost        | 14.29  | 24.85  | 28.54%  | 25.11%  | 0.8774
-  SARIMA         | 68.43  | 136.38 | 133.43% | 120.20% |-2.6930   ← REMOVED
-
-  Per-drug 2025 highlights (XGBoost vs Holt-Winters):
-
-  Drug   | XGB MAE | HW MAE  | Better   | XGB WMAPE | XGB R²
-  -------+---------+---------+----------+-----------+---------
-  N05C   |   2.41  |   1.95  | HW       |  56.35%   | -0.4496
-  M01AE  |   4.84  |   4.62  | HW       |  15.41%   |  0.1029
-  N02BA  |   5.19  |   4.84  | HW       |  87.67%   | -0.2160
-  M01AB  |   7.91  |   7.79  | HW       |  15.84%   |  0.0078
-  R06    |   8.95  |   7.74  | HW       |  25.88%   |  0.5772
-  N05B   |  15.17  |  13.77  | HW       |  45.41%   | -0.2818
-  R03    |  20.98  |  18.49  | HW       |  25.24%   |  0.4022
-  N02BE  |  48.89  |  45.64  | HW       |  22.98%   |  0.4277
-
-  Holt-Winters wins on MAE for all 8 drugs in 2025.
-  XGBoost remains competitive and is used as primary model; HW is used
-  as backup model (preferred for N05C and N02BA — irregular demand drugs).
-  SARIMA was removed from the webapp (all 8 drugs, SARIMA was worst by MAE).
-
-  Acceptable error threshold (for drift monitoring dashboard):
-    mae_threshold = XGBoost_MAE × 1.20 = 14.29 × 1.20 = 17.15 units/week
-
-
-================================================================================
-13. MODEL DRIFT ANALYSIS
-================================================================================
-
-After fixing all data leakage bugs (Bugs 7-10), the XGBoost model shows
-only minimal performance degradation from 2018 to 2019 (+9.0% MAE).
-
-  2018 Validation : MAE=11.45, R²=0.9189
-  2019 Final Test : MAE=12.48, R²=0.8663   (+9.0% — ✅ VALIDATION PASSED)
-
-This is well within acceptable bounds for a model trained on 2014-2017
-data and deployed 2 years forward.
-
-N02BE Analysis — Largest Absolute Errors:
-  - 2018 MAE: 33.58
-  - 2019 MAE: 38.23 (+14% — consistent with moderate distribution shift)
-
-  N02BE has the widest demand range (86–478 in 2019, historical mean 208).
-  High absolute error is expected for this drug due to demand volatility.
-  R²=0.58 confirms the model captures the general trend and seasonal pattern
-  but struggles with exact magnitude at peaks/troughs.
-
-  Earlier versions of the pipeline reported N02BE 2019 MAE=121.39 due to
-  data leakage bugs (Bug 7: training outlier cap not applied at inference).
-  After fixing all bugs and training on uncapped data, the model now correctly
-  handles the full N02BE demand range.
-
-Primary Driver of Remaining Errors:
-  N02BE is the highest-error drug (MAE=38.23), contributing disproportionately
-  to the overall MAE. Excluding N02BE, the average 2019 MAE for the remaining
-  7 drugs is approximately 7.9 — comparable to the best baseline (Holt-Winters
-  at 6.91 overall MAE).
-
-Quarterly Drift (within 2019):
-  Q1 MAE = 16.60 (N02BE post-holiday spike drives Q1 errors)
-  Q2 MAE = 10.08 (demand stabilises, model performs well)
-  Q3 MAE =  9.55 (best quarter — model well-calibrated mid-year)
-  Q4 MAE = 35.62 (only 1 week; not statistically representative)
-
-Interpretation for Thesis:
-  The XGBoost model achieved R²=0.9189 on the 2018 held-out validation set
-  and R²=0.8663 on the fully unseen 2019 data, demonstrating robust
-  out-of-sample generalisation. The +9% MAE degradation over a 2-year
-  projection horizon is consistent with expected temporal drift in
-  pharmaceutical demand patterns and does not indicate model failure.
-
-  Key finding: After identifying and fixing four successive data leakage
-  bugs (Bugs 7-10), the model's true performance is considerably more modest
-  than initially reported — but also far more robust and credible. The
-  honest 2019 results (MAE=12.48) represent genuine predictive skill on
-  completely unseen future data.
-
-Recommendations:
-  1. Retrain model annually with the most recent 4 years of data
-  2. Implement drift detection: alert if rolling 4-week MAE exceeds
-     1.20 × the 2018 per-drug baseline
-  3. Consider hybrid strategy: SARIMA/Holt-Winters for stable drugs,
-     XGBoost for volatile drugs
-  4. Apply formal leakage audit checklist before reporting any ML results
-
-  ---
-  BACKGROUND: Why XGBoost Was Retrained on Uncapped Data (Bug 7 fix)
-  ---
-
-  The data cleaning pipeline applied winsorization (outlier capping) before
-  both SARIMA and XGBoost were trained. This was the right choice for SARIMA
-  ROOT CAUSE (confirmed by debugging in model_validation_2019.ipynb):
-  The data cleaning pipeline (data_cleaning.ipynb) applied winsorization
-  (outlier capping) to raw sales quantities. For N02BE, this capped all
-  values at 99.625 units/week.
-
-  Evidence:
-    - train_xgboost.csv N02BE range : 92.0 – 99.625  (all capped)
-    - test_xgboost.csv  N02BE range : 99.625 – 99.625 (constant — ALL rows)
-    - Database raw 2019 N02BE range : 86 – 546
-
-  The 2018 "validation" had N02BE as a constant series (all = 99.625).
-  The model predicted ≈ 99.625 for every row → MAE = 0.17 was trivially
-  achieved by predicting the constant. R² = 0.000 confirms this: there
-  was no variance to explain.
-
-  In 2019, the validation notebook queried raw uncapped database values
-  and used them directly to compute lag features (lag_1 = 289, lag_52 = 255).
-  These values are completely out-of-distribution for a model trained on
-  capped data (where lag features were always ≤ 99.625). The model predicted
-  ≈ 71 when the actual was ≈ 354 → MAE = 121.39.
-
-  This is a FEATURE ENGINEERING PIPELINE MISMATCH, not concept drift.
-  The 2019 actual N02BE mean is 193, which is lower than the historical
-  mean of 208 — so demand did NOT surge; the pipeline simply forgot to
-  apply the same cap that was present during training.
-
-  Fix applied (model_validation_2019.ipynb, debug cell):
-    1. Learn per-drug caps from train_xgboost.csv (e.g., N02BE cap = 99.625)
-    2. Cap df_full (2014–2019 history) before computing lag/rolling features
-    3. Cap df_2019 actuals for a fair apples-to-apples comparison
-    4. Rebuild all lag/rolling features using capped history
-    5. Re-run predictions with corrected features
-
-Other Drug Degradation (moderate, genuine drift):
-  - M01AB (+303.6%), M01AE (+307.1%), N02BA (+75.3%), N05B (+97.4%),
-    R06 (+394.1%), R03 (+79.1%) all show moderate degradation
-  - These are consistent with real distributional shift over 2+ years
-    (model trained to 2017, tested in 2019)
-  - None have the extreme factor seen in N02BE
-
-Stable Drugs (model remained reliable):
-  - N05C : MAE improved from 0.98 to 0.80 (-18.4%) ← Very stable demand
-  - R06  : MAE increased only +7.5%               ← Seasonal pattern stable
-
-Interpretation for Thesis:
-  The XGBoost model achieved R²=0.9913 on the 2018 held-out validation set,
-  demonstrating strong in-distribution predictive performance. The 2019
-  out-of-sample test revealed two distinct failure modes:
-
-  (a) Pipeline inconsistency (N02BE): The outlier capping applied during
-      data cleaning was not reproduced during 2019 inference, causing
-      lag features to be orders of magnitude outside the model's training
-      distribution. This highlights the critical importance of encapsulating
-      all preprocessing steps in a reproducible inference pipeline.
-
-  (b) Genuine temporal drift (remaining 6 drugs): Moderate degradation
-      (+75–394%) reflects real changes in demand patterns over the
-      2018-2019 period and demonstrates the need for periodic retraining
-      in production pharmacy forecasting systems.
-
-Recommendations:
-  1. Fix inference pipeline: apply identical outlier caps (from training
-     data) to all lag/rolling features before scoring new data
-  2. Retrain model annually with the most recent 4 years of data
-  3. Implement drift detection: alert if rolling 4-week MAE exceeds
-     1.20 × the 2018 per-drug baseline
-  4. Retrain XGBoost on uncapped (raw) data — full explanation below
-
-  ---
-  RECOMMENDATION 4 IN DETAIL:
-  Why XGBoost Should Be Retrained on Uncapped Data
-  ---
-
-  The data cleaning pipeline applied winsorization (outlier capping) before
-  both SARIMA and XGBoost were trained. This was the right choice for SARIMA
-  but the wrong choice for XGBoost, for fundamentally different reasons.
-
-  Why capping was APPROPRIATE for SARIMA:
-    SARIMA is a linear parametric model. It estimates additive components
-    (trend, seasonal, error) by fitting coefficients to the observed series.
-    A single extreme spike directly distorts those coefficient estimates —
-    for example, one week where N02BE = 450 can inflate the seasonal
-    coefficient for that calendar week across all future predictions.
-    SARIMA has no built-in mechanism to discount individual extreme values.
-    Winsorizing the training data before fitting SARIMA is therefore standard
-    practice: it prevents a small number of anomalous weeks from biasing the
-    model's understanding of "normal" seasonal demand.
-
-  Why capping was HARMFUL for XGBoost:
-    XGBoost is a tree-based ensemble model. Decision trees partition the
-    feature space into rectangular regions by learning split thresholds
-    (e.g., "if lag_1 > 180 then go right"). This means:
-
-    (a) Trees are inherently robust to outliers in the TARGET variable.
-        A large y-value does not distort splits — it simply becomes a leaf
-        node with a high predicted value. Unlike linear models, XGBoost does
-        not need the target to be bounded in order to produce stable estimates.
-
-    (b) Trees REQUIRE the training and inference feature distributions to
-        match. If the model is trained on data where lag_1 ≤ 99.625, it will
-        have learned splits only within that range (e.g., "lag_1 > 97" or
-        "lag_1 > 95"). When presented with lag_1 = 289 at inference time,
-        every split threshold it learned is below that value, so the input
-        falls into the rightmost leaf of every tree — a leaf that was only
-        ever trained on values ≈ 99. The model cannot extrapolate; it returns
-        its highest-seen prediction (~71 units) rather than anything near the
-        true value of ~354.
-
-    (c) Capping destroyed real signal. N02BE's raw range is 86–546 units/week.
-        Capping at 99.625 compressed 68% of the actual demand range into a
-        single boundary value. The model never learned that demand can be 200,
-        300, or 500 units/week, nor what feature patterns (e.g., high lagged
-        values, seasonality, trend) correspond to those high-demand periods.
-        If retrained on uncapped data, XGBoost would learn splits such as:
-          "if lag_1 > 200 AND month_sin > 0.8 → predict 380"
-        which would be far more useful for real-world pharmacy restocking.
-
-  The right approach for XGBoost:
-    Option A — Train on raw uncapped data (recommended):
-      Remove the winsorization step from the XGBoost branch of the pipeline.
-      XGBoost's gradient boosting objective is robust to large values because
-      individual trees are shallow (max_depth=5–6) and the learning rate
-      shrinks each tree's contribution. The ensemble averages out any single
-      tree overfit to an extreme value.
-      Expected outcome: the model correctly learns the N02BE high-demand
-      regime (lag_1 ≥ 200 → high predicted sales), and 2019 MAE is expected
-      to fall sharply from 121.39 to a level comparable to other drugs.
-
-    Option B — Apply log transformation instead of capping:
-      Replace winsorization with log1p(x) = log(1 + x) on total_quantity.
-      This compresses the tail (reducing the influence of extreme values)
-      without destroying information the way hard capping does.
-      The full range 86–546 maps to 4.46–6.30 in log space — a modest
-      ratio of 1.41×, versus a raw ratio of 6.3×. XGBoost can learn this
-      compressed range easily and predictions are back-transformed with
-      expm1(). This is a common best-practice for count/sales data.
-
-    Option C — Keep capping but apply it consistently (minimal fix):
-      As implemented in the Bug 7 fix, apply the same training-time cap to
-      all inference inputs. This prevents the out-of-distribution failure
-      but does NOT fix the underlying limitation: the model still cannot
-      predict demand above 99.625 for N02BE, which is wrong for 2019.
-      This option is only suitable as a short-term patch.
-
-  Summary for write-up:
-    Outlier capping is a preprocessing step that must be tailored to the
-    model type, not applied uniformly across all models in the pipeline.
-    SARIMA benefits from capping because it is a linear model sensitive to
-    leverage points. XGBoost does not benefit from capping — it is harmed
-    by it, because trees cannot extrapolate beyond the range of values they
-    were trained on. The correct preprocessing strategy for a tree ensemble
-    on pharmaceutical sales data is either to use raw counts directly or to
-    apply a variance-stabilising transformation (log/sqrt) that preserves
-    the ordering and relative magnitude of all demand levels.
-
-
-================================================================================
-14. BUGS FOUND & FIXED DURING DEVELOPMENT
-================================================================================
-
-The following technical issues were identified and resolved during development:
-
-  Bug 1: Feature Column Order Mismatch
-    - Problem : XGBoost model expected features in a specific column order.
-                Running model_validation_2019.ipynb produced a
-                "feature_names mismatch" error.
-    - Fix     : Reordered the 2019 feature DataFrame to match the exact
-                column sequence used during model training using
-                feature_cols_ordered.
-
-  Bug 2: time_index Computed Incorrectly in 2019 Notebook
-    - Problem : time_index was computed as range(len(df_2019)), which reset
-                the counter to 0 for 2019. The model expected a cumulative
-                index counting from 2014.
-    - Fix     : Changed to compute time_index as cumulative week count from
-                the start of the full dataset (2014 onwards).
-
-  Bug 3: Expanding Stats Computed Only on 2019 Data
-    - Problem : expanding_mean and expanding_std were calculated using only
-                the 2019 slice of data. This gave wrong values and was a
-                form of data inconsistency.
-    - Fix     : Recalculated expanding stats using the full 2014-2019 history
-                concatenated, then selected 2019 rows after computation.
-
-  Bug 4: ATC Encoding Used Full Codes Instead of Main Group
-    - Problem : During 2019 re-encoding, the full ATC code (e.g., 'M01AB')
-                was mapped instead of the main group initial character ('M').
-                This caused the model to receive encoding values it had never
-                seen during training.
-    - Fix     : Applied .str[0] to extract the first character of the ATC
-                code before mapping to the integer encoding (M→0, N→1, R→2).
-
-  Bug 5: Drug Label Encoding Not Reproducible
-    - Problem : Drug integer encoding used an unsorted list of drug names,
-                meaning the mapping could vary between runs depending on the
-                order data appeared.
-    - Fix     : Enforced sorted(df['drug_name'].unique()) to ensure the
-                encoding is always alphabetically consistent.
-
-  Bug 6: Hardcoded 2018 Benchmark Values Became Stale
-    - Problem : model_validation_2019.ipynb had hardcoded 2018 metrics
-                (MAE=1.40, per-drug MAEs) from an earlier training run.
-                After retraining on 2014-2017, the actual 2018 results
-                changed to MAE=1.81 — making all comparisons incorrect.
-    - Fix     : Replaced all hardcoded values with dynamic loading from:
-                  - validation_2018_metrics.json  (overall metrics)
-                  - xgboost_results.csv           (per-drug metrics)
-                All thresholds (e.g., MAE < 2.17) are now computed at
-                runtime as mae_2018 × 1.20.
-
-  Bug 7: Training Outlier Cap Not Applied to 2019 Inference Pipeline
-    - Problem : The data cleaning pipeline winsorized (capped) sales
-                quantities per drug to remove outliers before training.
-                For N02BE, this cap was 99.625 units/week. In the 2018
-                test split, ALL N02BE values were exactly 99.625 (constant).
-                The model learned to predict ≈ 99.625 for N02BE — giving
-                an artefactual MAE of 0.17 (near-zero error on a constant).
-
-                In model_validation_2019.ipynb, the 2019 data was loaded
-                directly from the database (raw, uncapped values up to 546)
-                and lag features were computed from this raw history
-                (lag_1 = 289 instead of ≤ 99.625). These values were
-                completely out-of-distribution for the trained model,
-                causing predictions of ≈ 71 against actuals of ≈ 354,
-                producing MAE = 121.39.
-
-    - Confirmed by:
-                  • train_xgboost.csv N02BE range: 92.0 – 99.625
-                  • test_xgboost.csv  N02BE range: 99.625 – 99.625 (constant)
-                  • Database 2019 N02BE range    : 86 – 546 (raw)
-                  • Encoding sensitivity test: prediction unchanged across
-                    all drug_name_encoded values (0–7) → encoding not the cause
-                  • lag_1 mismatch confirmed: stored 289.0, expected ≤ 99.625
-
-    - Fix     : In model_validation_2019.ipynb (debug section):
-                  1. Learn per-drug caps from train_xgboost.csv
-                  2. Apply caps to df_full before computing lag/rolling features
-                  3. Apply caps to df_2019 actuals for fair comparison
-                  4. Rebuild all lag/rolling/EWM features from capped history
-                  5. Re-score with corrected feature matrix
-
-    - Lesson 1: Any preprocessing step applied during training (scaling,
-                capping, encoding) MUST be reproduced identically during
-                inference. Saving the cap values alongside the model
-                (e.g., in a preprocessing_config.json) is recommended
-                for all future pipelines.
-
-    - Lesson 2: Outlier capping is model-type-dependent and must NOT be
-                applied uniformly across all models in a pipeline.
-
-                SARIMA  → capping HELPS.
-                  SARIMA is a linear parametric model. Extreme values directly
-                  bias its coefficient estimates (trend slope, seasonal
-                  amplitudes). Removing or capping spikes before fitting
-                  prevents a handful of anomalous weeks from dominating the
-                  model's representation of normal seasonal behaviour.
-
-                XGBoost → capping HURTS.
-                  XGBoost is a tree ensemble. Decision trees learn split
-                  thresholds within the observed feature range. If every
-                  training example has lag_1 ≤ 99.625, the model learns splits
-                  only within [0, 99.625]. At inference time, an input of
-                  lag_1 = 289 falls beyond all learned thresholds and maps to
-                  the same extreme leaf as lag_1 = 99 — the model cannot
-                  distinguish the two. This is not overfitting; it is the
-                  fundamental inability of a tree to extrapolate outside its
-                  training range.
-
-                  Furthermore, tree ensembles are inherently robust to large
-                  target values: a week with sales=450 simply becomes a leaf
-                  with a high predicted value; it does not skew the splits of
-                  other leaves. Capping is therefore both unnecessary and
-                  counterproductive for XGBoost.
-
-                  The correct fix for XGBoost is to train on uncapped data
-                  (or log-transformed data), so the model learns the full
-                  demand distribution and can make valid predictions across
-                  the observed range at inference time.
-
-  Bug 8: Data Leakage in Trend and Statistical Features
-    - Problem : Three feature engineering steps used the actual target
-                value at time t instead of the lagged value at t-1:
-
-                  diff_1w = actual[t] - actual[t-1]       ← leaks actual[t]
-                  pct_change_1w = diff_1w / actual[t-1]   ← leaks actual[t]
-                  ratio_to_expanding_mean = actual[t] /
-                    expanding_mean_to_t-1                 ← leaks actual[t]
-
-                This is target leakage — the feature directly encodes
-                information about the value being predicted, making the
-                model appear far more accurate than it actually is.
-
-    - Confirmed by: R²=1.00 for 7/8 drugs (impossible without leakage)
-    - Fix     : All three formulas replaced with lag-based equivalents:
-                  diff_1w = lag_1 - lag_2
-                  pct_change_1w = (lag_1 - lag_2) / lag_2
-                  ratio_to_expanding_mean = lag_1 / expanding_mean
-
-                Applied in:
-                  - notebooks/pharmacy_sales_feature_engineering.ipynb
-                    (cell: Trend features — diff, pct_change, ratio)
-                  - notebooks/model_validation_2019.ipynb
-                    (cell: trend features)
-
-    - Lesson  : Any feature that divides, subtracts, or compares the
-                raw target variable against a lagged/aggregate statistic
-                must use the LAGGED target (t-1 or earlier), never the
-                current target (t).
-
-  Bug 9: drug_avg_sales Computed on Full Dataset Including Test Period
-    - Problem : The drug-specific statistical features (drug_avg_sales,
-                drug_std_sales, drug_min_sales, drug_max_sales, drug_cv)
-                were computed from the entire dataframe (all years 2014-2018),
-                including the 2018 test period.
-
-                  # Bug:
-                  drug_level_stats = df_model.groupby('drug_name')['total_quantity'].agg(...)
-
-                This means the 2018 test rows contributed to the mean
-                and standard deviation that the model used as features —
-                a subtle form of future leakage.
-
-    - Fix     : Drug statistics are now computed exclusively from the
-                training data (years 2014-2017):
-
-                  # Fix:
-                  drug_level_stats = train_xgb.groupby('drug_name')['total_quantity'].agg(...)
-
-                Applied in:
-                  - notebooks/pharmacy_sales_feature_engineering.ipynb
-                    (cell: Drug-specific features)
-                  - notebooks/model_validation_2019.ipynb
-                    (drug stats computed from df_full[year < 2019])
-
-    - Lesson  : Any aggregate statistic used as a feature (mean, std, etc.)
-                must be computed from training-period data only, never
-                from the full dataset. This applies to group statistics,
-                global statistics, and any normalization reference values.
-
-  Bug 10: total_quantity_log (Log of Target) Included as Feature
-    - Problem : The feature engineering pipeline created a
-                total_quantity_log = log1p(total_quantity) column and
-                stored it in the training/test CSVs alongside all other
-                features. In the XGBoost model notebook, the metadata_cols
-                exclusion list contained total_quantity_scaled but NOT
-                total_quantity_log. Therefore, log(target) was included
-                in the feature matrix passed to XGBoost.
-
-                log1p(total_quantity) is a monotonic transformation of
-                the target — it IS the target in disguise. Including it
-                as a feature is direct target leakage: the model can
-                perfectly reconstruct the target from this single feature.
-
-    - Confirmed by: Adding total_quantity_log to metadata_cols caused
-                    feature count to drop from 48 to 47, and 2018 MAE
-                    increased from 0.14 to 11.45 (realistic).
-
-    - Fix     : Added 'total_quantity_log' to metadata_cols in:
-                  - notebooks/pharmacy_xgboost_model.ipynb
-                    (cell: Data loading and feature setup)
-                  - notebooks/model_validation_2019.ipynb
-                    (cell: Feature column preparation)
-
-                  metadata_cols = [..., 'total_quantity_log',
-                                        'total_quantity_scaled']
-
-    - Lesson  : Any column derived from the target variable
-                (log, sqrt, standardised, binned, etc.) must be
-                explicitly excluded from the feature matrix. The safest
-                approach is a whitelist of allowed features rather than
-                a blacklist of excluded ones.
-
-  Impact of Bug 8-10 Fixes (cumulative effect):
-    Before all fixes:  2018 MAE=0.14, R²=0.9999 (near-perfect, impossible)
-    After Bug 8 fix:   2018 MAE=0.14, R²=0.9999 (still wrong — log leakage)
-    After Bug 9 fix:   drug stats are clean but log leakage persists
-    After Bug 10 fix:  2018 MAE=11.45, R²=0.9189 (realistic, honest)
-    2019 final test:   MAE=12.48, R²=0.8663 (+9% degradation — PASS)
-
-
-================================================================================
-15. FILE & OUTPUT INVENTORY
-================================================================================
-
-Key output files and where to find them:
-
-  File                                  | Location
-  --------------------------------------+----------------------------------------
-  Trained XGBoost model (production)    | data/results/xgboost/xgboost_final_model.pkl
-  XGBoost model (JSON format)           | data/results/xgboost/xgboost_model.json
-  2018 benchmark metrics (original)     | data/results/xgboost/validation_2018_metrics.json
-  2025 overall metrics (production)     | data/results/xgboost/validation_metrics.json
-  2025 per-drug metrics (production)    | data/results/xgboost/xgboost_results.csv
-  2025 predictions (all models)         | data/results/validation_2025/2025_predictions.csv
-  2025 per-drug comparison              | data/results/validation_2025/2025_per_drug_comparison.csv
-  2025 quarterly breakdown              | data/results/validation_2025/2025_quarterly_analysis.csv
-  2025 validation summary               | data/results/validation_2025/2025_validation_summary.txt
-  2019 predictions (original test)      | data/results/validation_2019/2019_predictions.csv
-  2019 per-drug comparison              | data/results/validation_2019/2019_per_drug_comparison.csv
-  2019 quarterly breakdown              | data/results/validation_2019/2019_quarterly_analysis.csv
-  Feature importance                    | data/results/xgboost/feature_importance.csv
-  Baseline results                      | data/results/baseline_models/baseline_summary.csv
-  SARIMA results                        | data/results/sarima/sarima_results.csv
-  Feature-engineered training data      | data/processed/train_xgboost.csv
-  Feature-engineered validation data    | data/processed/test_xgboost.csv
-  Label encoders                        | data/processed/label_encoders.pkl
-  Best hyperparameters                  | data/results/xgboost/best_params.pkl
-  SARIMA/Baseline modeling data         | data/processed/sales_modeling_sarima.csv
-  XGBoost modeling data (uncapped)      | data/processed/sales_modeling_xgboost.csv
-  Legacy modeling alias (= SARIMA file) | data/processed/sales_modeling.csv
-
-
-================================================================================
-16. HOW TO RE-RUN THE FULL PIPELINE
-================================================================================
-
-The notebooks must be run in the following order:
-
-  Step 1 — Data Cleaning
-    Notebook : notebooks/data_cleaning.ipynb
-    Input    : data/raw/salesweekly.csv
-    Output   : data/processed/sales_cleaned.csv
-               data/processed/sales_cleaned_no_outliers.csv
-               data/processed/sales_modeling_sarima.csv   ← capped (SARIMA/Baseline)
-               data/processed/sales_modeling_xgboost.csv  ← uncapped (XGBoost)
-               data/processed/sales_modeling.csv          ← legacy alias
-
-  Step 2 — EDA (optional, no output files required for modelling)
-    Notebook : notebooks/pharmacy_sales_eda.ipynb
-
-  Step 3 — Feature Engineering
-    Notebook : notebooks/pharmacy_sales_feature_engineering.ipynb
-    Input    : data/processed/sales_modeling_xgboost.csv  ← uncapped XGBoost file
-    Output   : data/processed/train_xgboost.csv, test_xgboost.csv
-               data/processed/train_sarima.csv,  test_sarima.csv
-               data/processed/train_baseline.csv, test_baseline.csv
-               data/processed/label_encoders.pkl
-
-  ⚠ NOTE ON PREPROCESSING SPLIT:
-    Baseline and SARIMA models consume sales_modeling_sarima.csv (IQR-capped).
-    XGBoost consumes sales_modeling_xgboost.csv (no capping).
-    This is intentional — each model gets the preprocessing suited to its
-    assumptions. The evaluation period, drugs, and temporal split are identical
-    across all three models, so the comparison remains fair.
-
-  Step 4 — Baseline Models
-    Notebook : notebooks/pharmacy_sales_baseline_models.ipynb
-    Input    : data/processed/train_baseline.csv, test_baseline.csv
-    Output   : data/results/baseline_models/
-
-  Step 5 — SARIMA Model
-    Notebook : notebooks/pharmacy_sarima_model.ipynb
-    Input    : data/processed/train_sarima.csv, test_sarima.csv
-    Output   : data/results/sarima/
-
-  Step 6 — XGBoost Model
-    Notebook : notebooks/pharmacy_xgboost_model.ipynb
-    Input    : data/processed/train_xgboost.csv, test_xgboost.csv
-    Output   : data/results/xgboost/xgboost_final_model.pkl
-               data/results/xgboost/validation_2018_metrics.json
-               data/results/xgboost/xgboost_results.csv
-
-  Step 7 — 2019 Validation (Final Test)
-    Notebook : notebooks/model_validation_2019.ipynb
-    Input    : data/raw/salesweekly.csv (2019 rows)
-               data/results/xgboost/xgboost_final_model.pkl
-               data/results/xgboost/validation_2018_metrics.json
-               data/results/xgboost/xgboost_results.csv
-    Output   : data/results/validation_2019/
-
-  Step 8 — Model Retraining on Extended Dataset (Production)
-    Notebook : notebooks/model_validation.ipynb  (or equivalent)
-    Purpose  : Re-run Steps 1–6 with 2014–2024 as the full training period;
-               use 2025 as the sole out-of-sample test set.
-    Input    : data/raw/salesweekly.csv  (updated to include 2020–2024 data)
-    Output   : data/results/xgboost/xgboost_final_model.pkl  (retrained)
-               data/results/xgboost/validation_metrics.json  (2025 metrics)
-               data/results/xgboost/xgboost_results.csv      (2025 per-drug)
-               data/results/validation_2025/                 (all 2025 outputs)
-
-  NOTE: Steps 3 and 6 MUST be re-run if the data changes. Step 7 reads
-  benchmark values from the JSON file produced by Step 6 — ensuring all
-  comparisons remain consistent with the latest model.
-  After retraining (Step 8), the webapp automatically uses the new
-  xgboost_final_model.pkl and reads metrics from validation_metrics.json.
-
-
-================================================================================
-17. KEY CONCLUSIONS
-================================================================================
-
-1. XGBoost and Holt-Winters Both Perform Strongly on Extended Dataset
-   After retraining on the full 2014–2024 dataset (10 years), both models
-   achieved R² > 0.87 on the unseen 2025 test set:
-     - XGBoost     : MAE=14.29, R²=0.8774, WMAPE=25.11%
-     - Holt-Winters: MAE=13.11, R²=0.8928, WMAPE=23.02%
-   Holt-Winters leads on all primary metrics (MAE, RMSE, WMAPE, R²) in 2025.
-   Both models generalise well to a fully unseen calendar year.
-   A per-drug hybrid approach is deployed in the production webapp: XGBoost
-   is the primary model; Holt-Winters is used automatically for N05C and N02BA
-   (low-volume, irregular demand drugs).
-
-    Model Selection Rationale:
-    Holt-Winters achieved the lowest absolute error (MAE=13.11) and is
-    recommended as the interpretable fallback model for stakeholders who
-    require simplicity and transparency. XGBoost is recommended as the
-    primary production model due to its competitive accuracy (MAE=14.29,
-    MAPE=28.54%), strong R² of 0.877, and its ability to incorporate
-    external features and adapt to demand shifts - capabilities that are
-    critical for a real pharmacy forecasting system. SARIMA was eliminated
-    due to poor generalisation on this dataset.
-
-   NOTE: Original 2018 results (MAE=11.45) were derived from a 4-year training
-   set. After retraining on 10 years, the production model is now evaluated
-   on 2025 data. The earlier 2018/2019 results remain valid as an academic
-   record of model development and leakage debugging.
-
-2. 2019 Validation Passed With Minimal Degradation (Original Pipeline)
-   The original out-of-sample test (2019) showed only +9.0% MAE degradation
-   (11.45 → 12.48), R²=0.8663. This confirmed the model generalises to future
-   data before the decision was made to retrain on extended data.
-   Earlier versions of the pipeline showed VALIDATION FAILED (+932% MAE);
-   this was caused by data leakage and an inconsistent inference pipeline
-   (Bugs 7-10).
-
-3. Data Leakage Is The Primary Threat to Model Integrity
-   Four distinct leakage bugs were identified and fixed during development:
-   - Bug 7 : Training outlier cap not applied at inference → OOD features
-   - Bug 8 : Trend features using actual[t] instead of lag[t-1]
-   - Bug 9 : Drug-level statistics computed from full dataset (incl. test)
-   - Bug 10: total_quantity_log (= log of target) included as a feature
-
-   The combined effect caused reported 2018 MAE to drop from a true value
-   of 11.45 to an artefactual 0.14 — a 99% artificial improvement.
-   This underscores that data leakage detection must be an explicit, systematic
-   step in every supervised learning pipeline, particularly for time-series
-   forecasting where chronological structure makes leakage easy to introduce.
-
-4. Model Retraining Confirmed Real-World Viability
-   After retraining on 10 years of data (2014–2024) and testing on 2025:
-     XGBoost: MAE=14.29, R²=0.8774 | Holt-Winters: MAE=13.11, R²=0.8928
-   Both models remain strong predictors on fully unseen future data.
-   Quarterly 2025 analysis shows consistent performance across all four
-   quarters (Q1 MAE=15.67, Q2=13.62, Q3=13.22, Q4=14.69 for XGBoost)
-   — substantially more stable than the original 2019 test, where Q1
-   suffered from a post-holiday N02BE spike (Q1 MAE=16.60, Q4=35.62).
-   The enlarged training set better captures long-term demand seasonality.
-
-5. Feature Engineering Proved Critical
-   The rich feature set (lags, rolling stats, EWM, cyclical encodings, expanding
-   stats, drug-level statistics) was key to XGBoost's strong performance and
-   R²=0.8774 on the 2025 out-of-sample test. All 47 features are derived
-   from information available strictly before the prediction point.
-
-6. Temporal Validation is Essential for Time-Series Models
-   Using strict temporal splits (no random shuffling) and an independent
-   held-out years (2019, then 2025) prevented overfitting and produced
-   honest, academically rigorous results. Neither test year was visible
-   during model design or hyperparameter selection.
-
-7. Preprocessing Must Be Tailored Per Model, Not Applied Uniformly
-   The project uses two separate preprocessing pipelines:
-     - sales_modeling_sarima.csv  (IQR-capped) for SARIMA and Holt-Winters
-     - sales_modeling_xgboost.csv (uncapped)   for XGBoost
-   SARIMA and Holt-Winters are linear models that benefit from outlier capping.
-   XGBoost is a tree ensemble that requires the full demand range in training
-   — it cannot extrapolate beyond its training range. Applying the same
-   capping to XGBoost caused the N02BE OOD failure (Bug 7).
-
-8. Honest Model Assessment Requires Systematic Leakage Auditing
-   This project identified four successive leakage bugs, each of which
-   was masked by the ones that came before it. A formal leakage audit
-   checklist — covering feature computation order, group statistics scope,
-   target-derived features, and inference pipeline consistency — should be
-   applied to every supervised forecasting project before reporting results.
-
-9. SARIMA Is Unsuitable for This Dataset at Weekly Granularity
-   After evaluating SARIMA on the 2025 test set (MAE=68.43, R²=−2.69),
-   SARIMA was removed from the production webapp entirely. It was worse
-   than a naive mean predictor (R²<0) for all quarters and all drugs.
-   The root cause is insufficient training data for a seasonal period of
-   s=52: even with 10 years of training data, SARIMA's AIC-selected orders
-   produced degenerate or near-trivial models for most drugs. Holt-Winters
-   (the simplest exponential smoothing variant) consistently outperforms
-   SARIMA at this data granularity and frequency.
-
-10. The Production System Deploys a Pharmacist-Friendly Web Interface
-    A Django 4.x webapp presents all forecasting results in plain language
-    accessible to clinicians with no data-science background. Key design
-    decisions: all ML jargon replaced with plain-English equivalents;
-    problematic drugs sorted to the top of every table; every flagged drug
-    shows a visible "Next Step" action; advanced metrics hidden behind a
-    "Show advanced data" toggle; threshold reference lines on all charts.
-
-
-================================================================================
-18. XGBOOST RETRAINING — EXTENDED DATASET (2014–2024)
-================================================================================
-
-Motivation:
-  The initial model development cycle (Sections 8–13) used a training period
-  of 2014–2017 (4 years). After all data leakage bugs were identified and
-  fixed, the final clean 2019 test result was MAE=12.48 (+9% from the 2018
-  validation). While this passed the 20% degradation threshold, the training
-  history was deliberately limited to maintain a clean academic split.
-
-  Once the academic pipeline was complete, the decision was made to retrain
-  on the maximum available history (2014–2024) for production deployment.
-  Using 10 full years of weekly data:
-    - Captures a broader range of seasonal, trend, and demand-shift patterns
-    - Provides more stable lag and rolling feature statistics
-    - Reduces the influence of any single unusual year (e.g., post-COVID)
-    - Enables more reliable long-range lag features (lag_52 is valid for
-      all training rows after the first year, instead of only for rows
-      after 2015)
-
-Training Configuration (Production Retrain):
-  - Training period  : 2014–2024 (all available completed years)
-  - Test period      : 2025 (full calendar year, 51 weeks per drug, 408 total)
-  - Algorithm        : XGBoost Regressor (same architecture as original)
-  - Features         : Same 47 engineered features (see Section 6)
-  - Hyperparameters  : Carried forward from 2018 grid-search experiments
-                       (max_depth=3, learning_rate=0.1, n_estimators=100,
-                        subsample=1.0, colsample_bytree=1.0)
-  - No separate held-out validation year; hyperparameters were frozen from
-    the original experiments to avoid any 2025 data snooping
-
-Output Files:
-  - data/results/xgboost/xgboost_final_model.pkl  (overwritten)
-  - data/results/xgboost/xgboost_model.json       (overwritten)
-  - data/results/xgboost/validation_metrics.json  (train: 2014-2024, val: 2025)
-  - data/results/xgboost/xgboost_results.csv      (2025 per-drug XGBoost metrics)
-  - data/results/xgboost/feature_importance.csv   (updated)
-  - data/results/xgboost/best_params.pkl          (updated)
-
-  The original validation_2018_metrics.json is retained for reference only.
-
-Holt-Winters Retraining:
-  Holt-Winters does not use a saved model file. It is fitted at inference time
-  (in ml_engine.py) on ALL historical data available up to the forecast date.
-  After the data extension, the HW model automatically benefits from 10 years
-  of training history without any code changes.
-
-Seasonal Naive / Baseline Comparison:
-  Baseline models were not formally rerun against 2025 data. The 2025 test
-  serves as the production model evaluation, not a model-selection exercise.
-
-
-================================================================================
-19. 2025 OUT-OF-SAMPLE VALIDATION RESULTS
-================================================================================
-
-Test period   : January – December 2025
-Drugs         : 8 (all ATC codes)
-Total records : 408 (51 weeks × 8 drugs)
-Source files  : data/results/validation_2025/ directory
-
-Overall Metrics (lower MAE / RMSE / MAPE / WMAPE = better; R² closer to 1.0):
-
-  Model          |  MAE   |  RMSE  |  MAPE   | WMAPE  |   R²
-  ---------------+--------+--------+---------+--------+---------
-  XGBoost        | 14.29  | 24.85  | 28.54%  | 25.11% | 0.8774
-  Holt-Winters   | 13.11  | 23.23  | 29.23%  | 23.02% | 0.8928
-  SARIMA         | 68.43  | 136.38 | 133.43% |120.20% |-2.6930
-
-  Holt-Winters wins on all primary metrics.
-  SARIMA's MAPE=133% and R²=−2.69 confirm it has no predictive value at
-  weekly granularity with s=52, even when trained on 10 years of data.
-
-Per-Drug Results — XGBoost vs Holt-Winters (2025):
-
-  Drug   | Seg    | Wks | Mean Act | XGB MAE | HW MAE  | XGB WMAPE | HW WMAPE | XGB R²  | HW R²   | Winner
-  -------+--------+-----+----------+---------+---------+-----------+----------+---------+---------+----------
-  N05C   | Low    |  51 |    4.3   |   2.41  |   1.95  |  56.35%   |  45.57%  | -0.4496 |  0.1363 | HW ✅
-  M01AE  | Medium |  51 |   31.4   |   4.84  |   4.62  |  15.41%   |  14.69%  |  0.1029 |  0.1797 | HW ✅
-  N02BA  | Medium |  51 |    5.9   |   5.19  |   4.84  |  87.67%   |  81.73%  | -0.2160 | -0.1770 | HW ✅
-  M01AB  | Medium |  51 |   49.9   |   7.91  |   7.79  |  15.84%   |  15.60%  |  0.0078 |  0.0460 | HW ✅
-  R06    | Medium |  51 |   34.6   |   8.95  |   7.74  |  25.88%   |  22.40%  |  0.5772 |  0.6632 | HW ✅
-  N05B   | High   |  51 |   33.4   |  15.17  |  13.77  |  45.41%   |  41.23%  | -0.2818 | -0.0433 | HW ✅
-  R03    | High   |  51 |   83.1   |  20.98  |  18.49  |  25.24%   |  22.26%  |  0.4022 |  0.5095 | HW ✅
-  N02BE  | High   |  51 |  212.8   |  48.89  |  45.64  |  22.98%   |  21.45%  |  0.4277 |  0.4903 | HW ✅
-
-  Notes:
-    - HW wins by MAE for all 8 drugs in 2025
-    - N05C and N02BA have negative R² for XGBoost — for these low-volume /
-      irregular-demand drugs the production system uses HW as primary model
-      (ml_engine.py: HW_PREFERRED_DRUGS = {"N05C", "N02BA"})
-    - N02BE continues to have the largest absolute error (MAE=48.89 for XGB,
-      45.64 for HW) due to its high-volume, high-volatility demand (mean=213)
-    - WMAPE is high for N05C (56%) and N02BA (88%) because these drugs have
-      very low mean sales (4.3 and 5.9 units/week) — even a small absolute
-      error produces a large percentage error
-    - M01AB and M01AE show low WMAPE (~15%) despite moderate MAE, confirming
-      the model handles medium-volume anti-inflammatories reliably
-
-Quarterly Analysis — 2025 (XGBoost):
-
-  Quarter | MAE   | RMSE  | MAPE   | WMAPE  |  R²   | Weeks
-  --------+-------+-------+--------+--------+-------+------
-  Q1 2025 | 15.67 | 26.80 | 24.46% | 25.22% | 0.878 |  13
-  Q2 2025 | 13.62 | 24.31 | 25.22% | 26.70% | 0.784 |  13
-  Q3 2025 | 13.22 | 23.46 | 32.57% | 26.93% | 0.844 |  13
-  Q4 2025 | 14.69 | 24.69 | 32.27% | 22.20% | 0.924 |  12
-
-  Quarterly Analysis — 2025 (Holt-Winters):
-
-  Quarter | MAE   | RMSE  | MAPE   | WMAPE  |  R²   | Weeks
-  --------+-------+-------+--------+--------+-------+------
-  Q1 2025 | 13.22 | 22.74 | 22.43% | 21.28% | 0.912 |  13
-  Q2 2025 | 12.54 | 22.60 | 27.39% | 24.58% | 0.813 |  13
-  Q3 2025 | 12.31 | 23.01 | 35.01% | 25.07% | 0.849 |  13
-  Q4 2025 | 14.46 | 24.64 | 32.45% | 21.85% | 0.924 |  12
-
-  Observation: Q4 2025 shows the best R² (0.92) for both models, confirming
-  stable forecasting performance in the final months of the year. Unlike the
-  original 2019 test which had only 1 Q4 week, the 2025 Q4 covers 12 weeks
-  and is statistically representative.
-
-Confidence Tiers (as deployed in the production webapp):
-
-  Tier   | WMAPE range | Drugs                | Interval multiplier
-  -------+-------------+----------------------+--------------------
-  High   | ≤ 20%       | M01AB, M01AE         | ±1.5 × MAE
-  Medium | 21–35%      | N02BE, R03, R06      | ±2.0 × MAE
-  Low    | > 35%       | N05B, N05C, N02BA    | ±2.5 × MAE
-
-Acceptable Error Threshold (drift monitoring):
-  mae_threshold = XGBoost overall MAE × 1.20 = 14.29 × 1.20 = 17.15 units/week
-  Drugs with per-week error above this threshold are flagged on the dashboard.
-
-  Per-drug drift status (2025):
-
-  Drug   | XGB MAE | Threshold (17.15) | Status
-  -------+---------+-------------------+---------------
-  N05C   |   2.41  | Below             | ✅ On Track
-  M01AE  |   4.84  | Below             | ✅ On Track
-  N02BA  |   5.19  | Below             | ✅ On Track
-  M01AB  |   7.91  | Below             | ✅ On Track
-  R06    |   8.95  | Below             | ✅ On Track
-  N05B   |  15.17  | Below             | ✅ On Track
-  R03    |  20.98  | Above             | ⚠ Needs Review
-  N02BE  |  48.89  | Above             | ⚠ Needs Review
-
-
-================================================================================
-20. SARIMA REMOVAL FROM PRODUCTION SYSTEM
-================================================================================
-
-Decision Date : March 2026
-Reason        : Unacceptable performance on 2025 out-of-sample test
-
-SARIMA 2025 Test Results:
-  MAE=68.43 (vs XGBoost 14.29 — 4.8× worse)
-  RMSE=136.38 (vs XGBoost 24.85 — 5.5× worse)
-  R²=−2.693 (negative — worse than predicting the mean in all cases)
-  WMAPE=120.2% (vs XGBoost 25.11%)
-
-Per-Drug SARIMA MAE vs XGBoost MAE (2025):
-
-  Drug   | SARIMA MAE | XGB MAE | Ratio (SAR/XGB)
-  -------+------------+---------+----------------
-  N02BE  |   212.78   |  48.89  |    4.4×
-  N05B   |   123.07   |  15.17  |    8.1×
-  R03    |    83.10   |  20.98  |    4.0×
-  R06    |    33.97   |   8.95  |    3.8×
-  M01AB  |    49.10   |   7.91  |    6.2×
-  M01AE  |    35.19   |   4.84  |    7.3×
-  N02BA  |     5.92   |   5.19  |    1.1×  (closest, still worse)
-  N05C   |     4.28   |   2.41  |    1.8×
-
-  SARIMA is worse than XGBoost for every single drug on 2025 data.
-  It is better than XGBoost on 0/8 drugs.
-
-Root Cause Analysis:
-  SARIMA at weekly granularity (s=52) requires at minimum 3–5 full seasonal
-  cycles in the training data to reliably estimate seasonal parameters.
-  Even with 10 years of training data (2014–2024), the AIC-selected SARIMA
-  orders produce near-trivial models for high-volume volatile drugs
-  (N02BE, N05B, R03) where the seasonal signal is dominated by random
-  demand variation.
-
-  Additionally, SARIMA is a univariate model — it cannot use the rich set
-  of engineered features (lag patterns, rolling statistics, drug-level
-  encodings) that allow XGBoost and Holt-Winters to capture cross-drug
-  demand patterns and long-term trends.
-
-Files Removed from Webapp:
-  All SARIMA-specific template variables, model badges, and result displays
-  were removed from the Django webapp (templates and views.py) in February 2026.
-  SARIMA result files (data/results/sarima/) are retained as academic records.
-
-Impact on Webapp:
-  - Forecast page: "SARIMA" model badge replaced with "Automated Forecast"
-    (XGBoost primary) or "Backup System Active" (Holt-Winters)
-  - Results page: SARIMA comparison column removed; only XGBoost vs
-    Holt-Winters comparison is shown
-  - Dashboard / Drift pages: Only XGBoost and HW error bars displayed
-
-
-================================================================================
-21. WEB APPLICATION DEVELOPMENT
-================================================================================
-
-Framework     : Django 4.x (Python)
-Frontend      : Bootstrap 5.3.2, Bootstrap Icons 1.11.3, Plotly.js 2.27.0
-Database      : SQLite (development) — configurable via config/database_config.py
-Location      : webapp/
-
-Architecture:
-
-  webapp/
-  ├── manage.py
-  ├── pharmacy_system/          — Django project settings & URL routing
-  │   ├── settings.py
-  │   ├── urls.py
-  │   └── wsgi.py
-  └── forecasting/              — Main Django app
-      ├── views.py              — Page rendering, context computation
-      ├── ml_engine.py          — Model loading, feature engineering, forecasting
-      ├── models.py             — Django ORM models (not used for ML storage)
-      ├── urls.py               — URL patterns for all pages
-      ├── base.py               — Base utilities
-      └── templates/
-          └── forecasting/
-              ├── base.html     — Shared layout: navbar, sidebar, Bootstrap
-              ├── dashboard.html
-              ├── forecast.html
-              ├── results.html
-              ├── drift.html
-              └── inventory.html
-
-Pages Implemented:
-
-  1. Dashboard (/)
-     - Summary KPI cards: forecast error, backup system error, acceptable
-       error limit, number of drugs needing attention
-     - Per-drug MAE bar chart (XGBoost vs HW) with threshold reference line
-     - Drug-by-drug table with status, next-step actions, advanced data toggle
-     - Auto-sorts flagged drugs to the top on page load
-
-  2. Forecast (/forecast/)
-     - Single-drug live forecasting: pharmacist selects drug + date
-     - Uses ml_engine.generate_forecast() → XGBoost primary, HW fallback
-     - Displays prediction, confidence interval, seasonal context
-     - Batch CSV upload: upload multiple drug/date pairs, returns all forecasts
-     - 12-week trend chart showing recent actuals + projected future
-
-  3. Results (/results/)
-     - Per-drug 2025 validation metrics with drug common names in selector
-     - Accuracy shown as ★ star ratings (not raw R² values)
-     - "Best Forecasting Approach" summary row
-     - Chart: XGBoost vs Holt-Winters vs actual weekly sales for selected drug
-
-  4. Drift Monitor (/drift/)
-     - Monitors whether the model's accuracy has changed vs the baseline
-     - KPI cards: drugs needing review, drugs on target, accuracy, threshold
-     - Horizontal bar chart: per-drug MAE (primary vs backup) with threshold
-       reference line at mae_threshold=17.15
-     - Drug-by-drug breakdown table with pharmacist-friendly columns:
-       Avg Weekly Error | [Advanced: Backup Error | Error % | Reliability | Change]
-       Status pill | Next Step button
-     - "Show advanced data" toggle hides/reveals ML metrics columns
-     - System insights section: explains what the numbers mean for the pharmacist
-
-  5. Inventory (/inventory/)
-     - Pharmacist enters current stock, lead time, service level, costs
-     - Computes: Safety Stock (Z × σ × √L), Reorder Point (μ×L + SS),
-       EOQ (√(2DS/H)), weeks of coverage, stock status
-     - Visual gauge showing current stock vs reorder point vs safety stock
-
-ML Engine (ml_engine.py) Key Components:
-
-  - load_model()               : Loads XGBoost model from xgboost_final_model.pkl
-  - load_historical_data()     : Reads sales_modeling.csv into DataFrame
-  - compute_features_for_date(): Builds the 47-feature row for XGBoost inference
-  - generate_forecast()        : XGBoost primary → HW fallback routing logic
-  - generate_hw_forecast()     : Fits Holt-Winters on available history
-  - load_2025_metrics()        : Returns hardcoded overall 2025 metrics dict
-  - build_2025_comparison()    : Builds per-drug comparison DataFrame for UI
-  - compute_inventory_recommendation(): Full EOQ/ROP/safety-stock calculation
-
-Confidence Tier System (deployed):
-  High  (WMAPE ≤ 20%) : M01AB, M01AE         → interval = ±1.5 × MAE
-  Medium(WMAPE 21-35%): N02BE, R03, R06       → interval = ±2.0 × MAE
-  Low   (WMAPE > 35%) : N05B, N05C, N02BA    → interval = ±2.5 × MAE
-
-
-================================================================================
-22. UI/UX DESIGN — PHARMACIST-FRIENDLY INTERFACE
-================================================================================
-
-Design Principle:
-  Every piece of information visible to the user must pass this test:
-  "Can a pharmacist with zero ML knowledge understand this in under 5 seconds
-  and know what to do next? If not, simplify it."
-
-Key Design Rules Applied:
-
-  1. Drug Common Names Always Shown
-     Every ATC code is paired with a plain-language common name:
-       M01AB → Anti-inflammatories
-       M01AE → Anti-inflammatories (Ibuprofen)
-       N02BA → Pain relief — Aspirin
-       N02BE → Pain relief — Paracetamol
-       N05B  → Anxiety relief
-       N05C  → Sleep aids
-       R03   → Asthma & breathing
-       R06   → Allergy relief
-
-  2. No Raw ML Metrics Visible by Default
-     - R² replaced with ★ star ratings (★★★★ Strong / ★★★ Moderate /
-       ★★ Weak / ★ Poor — treat as indicative)
-     - "MAE" labelled as "average forecast was off by X units per week"
-     - "WMAPE" and "R²" hidden behind "Show advanced data" toggle
-     - Model names: "XGBoost" → "Automated Forecast",
-                    "Holt-Winters" → "Backup System Active"
-
-  3. Unified 3-Tier Status System
-     ✅ On Track    — error within acceptable limit
-     ⚠ Needs Review — error exceeds 17.15 units/week threshold
-     (No "Degraded", "Drifted", or numeric statuses shown to users)
-
-  4. Problematic Drugs Sort to Top
-     All tables auto-sort by urgency on page load (JavaScript IIFE):
-     data-urgency="1" (flagged) rows appear before data-urgency="2" (stable)
-
-  5. Every Flagged Drug Has a Next Step
-     Flagged rows show: [Review →] button linking to the Results page
-     Stable rows show: ✓ No action needed
-
-  6. Charts Have Threshold Reference Lines
-     Dashboard and Drift charts include a red dotted vertical/horizontal
-     line at mae_threshold=17.15 with annotation "Acceptable limit: 17.15 units"
-     The threshold line is injected into the Plotly layout before newPlot()
-     to avoid race conditions.
-
-  7. Trust Signal in Header
-     Topbar shows: "Based on your pharmacy's 2014–2024 sales history"
-     (not "Trained on 10 years of data" — a pharmacist cares about their data,
-     not the technical training process)
-
-  8. Backup System Explained Transparently
-     When Holt-Winters is used: "Backup system active: This drug has seasonal
-     or irregular demand, so the system automatically uses a different
-     calculation approach. No action needed — the system handles this for you."
-
-  Files Modified in UI/UX Redesign (February–March 2026):
-    - webapp/forecasting/templates/forecasting/base.html
-    - webapp/forecasting/templates/forecasting/dashboard.html
-    - webapp/forecasting/templates/forecasting/drift.html
-    - webapp/forecasting/templates/forecasting/forecast.html
-    - webapp/forecasting/templates/forecasting/results.html
-    - webapp/forecasting/views.py  (added mae_threshold to context)
-
+  - data/results/xgboost/xgboost_final_model.pkl
+  - data/results/xgboost/validation_metrics.json
+
+
+======================================================================
+4. 2025 OUT-OF-SAMPLE VALIDATION RESULTS
+======================================================================
+Validation source:
+- data/results/validation_2025/2025_validation_summary.txt
+- data/results/validation_2025/2025_per_drug_comparison.csv
+- data/results/validation_2025/2025_predictions.csv
+
+Overall 2025 metrics (all 8 drugs, 408 records):
+
+XGBoost:
+- MAE   = 14.29
+- RMSE  = 24.85
+- MAPE  = 28.54
+- WMAPE = 25.11
+- R2    = 0.8774
+
+Holt-Winters:
+- MAE   = 13.11
+- RMSE  = 23.23
+- MAPE  = 29.23
+- WMAPE = 23.02
+- R2    = 0.8928
+
+SARIMA:
+- MAE   = 68.43
+- RMSE  = 136.38
+- MAPE  = 133.43
+- WMAPE = 120.20
+- R2    = -2.693
+
+Per-drug winner by MAE in the 2025 report:
+- Holt-Winters is best on all 8/8 drugs in the comparison table.
+
+
+======================================================================
+5. MODELS CHOSEN AND WHY
+======================================================================
+Final practical model strategy in the system is hybrid, not single-model.
+
+Chosen for deployment:
+1. XGBoost as the primary forecasting engine for most drugs.
+2. Holt-Winters as backup and preferred model for selected irregular/low-volume
+   drugs (currently N05C and N02BA in the webapp engine).
+
+Not chosen for deployment:
+- SARIMA, due to very poor out-of-sample performance in 2025 (large errors and
+  strongly negative R2 across many drugs).
+
+Why XGBoost remained in the deployed workflow:
+1. Strong overall generalization on 2025 (R2 about 0.88).
+2. Handles rich engineered features and nonlinear interactions.
+3. Already integrated as the main model artifact in the web app pipeline.
+4. Supports robust fallback logic when feature/history conditions fail.
+
+Why Holt-Winters is included as backup/secondary model:
+1. Best MAE in the 2025 benchmark table.
+2. Stable for some low-volume or irregular-demand series.
+3. Simple and reliable for one-step and short-horizon operational forecasts.
+
+Why SARIMA was removed from production path:
+1. Very high error magnitudes in 2025.
+2. Unreliable generalization (negative R2).
+3. Inferior performance versus both XGBoost and Holt-Winters.
+
+
+======================================================================
+6. WEBAPP INTEGRATION (DJANGO)
+======================================================================
+Web application location:
+- webapp/
+
+Main forecasting integration file:
+- webapp/forecasting/ml_engine.py
+
+How integration works:
+1. Path wiring in ml_engine.py points from webapp to project-level data/results
+   directories.
+2. The engine loads persisted artifacts and evaluation files, including:
+   - xgboost_final_model.pkl
+   - validation_2025 metrics and prediction tables
+3. Forecast requests call generate_forecast(), which uses model-routing logic:
+   - Route selected drugs to Holt-Winters directly (N05C, N02BA).
+   - Otherwise run XGBoost.
+   - If XGBoost fails, automatic fallback to Holt-Winters.
+4. Confidence intervals are built from per-drug MAE and confidence tiers.
+5. Batch CSV forecasting is supported through process_csv_forecast().
+6. Inventory recommendations are computed from demand statistics in
+   compute_inventory_recommendation().
+
+Django endpoint mapping:
+- webapp/forecasting/urls.py
+  - /            -> dashboard
+  - /results/    -> model comparison and per-drug performance view
+  - /forecast/   -> single and batch forecast interface
+  - /drift/      -> drift/performance monitoring dashboard
+  - /inventory/  -> inventory decision support
+
+Project URL mount:
+- webapp/pharmacy_system/urls.py
+  - root path includes forecasting.urls
+
+View-layer integration:
+- webapp/forecasting/views.py
+  - Reads model metrics and prediction files via ml_engine helpers.
+  - Builds charts (Plotly) for dashboard, results, forecast, and drift pages.
+  - Displays primary vs backup model behavior using 2025 metrics.
+
+
+======================================================================
+7. TRAINING-TO-DEPLOYMENT PIPELINE SUMMARY
+======================================================================
+1. Prepare cleaned and modeling datasets from raw weekly sales.
+2. Train and evaluate baseline, SARIMA, and XGBoost families.
+3. Retrain/finalize with history through 2024.
+4. Validate on full unseen 2025 period.
+5. Select deployment strategy based on out-of-sample behavior.
+6. Integrate selected models into Django forecasting engine.
+7. Expose operational dashboards and forecasting workflows to users.
+
+
+======================================================================
+8. KEY CONCLUSIONS
+======================================================================
+1. The project used a valid temporal experiment design: train on 2014-2024,
+   test on unseen 2025.
+2. SARIMA underperformed and was not suitable for production use.
+3. XGBoost and Holt-Winters were the practical models retained.
+4. The deployed system uses a hybrid route-and-fallback strategy to improve
+   reliability at inference time.
+5. The webapp is fully integrated with model files, validation artifacts,
+   visual dashboards, and inventory-support logic.
+
+
+======================================================================
+9. IMPORTANT OUTPUT REFERENCES
+======================================================================
+Model and validation outputs:
+- data/results/xgboost/validation_metrics.json
+- data/results/validation_2025/2025_validation_summary.txt
+- data/results/validation_2025/2025_per_drug_comparison.csv
+- data/results/validation_2025/2025_predictions.csv
+- data/results/sarima/sarima_results.csv
+- data/results/baseline_models/baseline_summary.csv
+
+Integration code:
+- webapp/forecasting/ml_engine.py
+- webapp/forecasting/views.py
+- webapp/forecasting/urls.py
+- webapp/pharmacy_system/urls.py
