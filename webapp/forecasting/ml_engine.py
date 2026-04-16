@@ -89,13 +89,7 @@ HW_MAE_BY_DRUG = {
 # ── Holt-Winters helpers ──────────────────────────────────────────────────────
 
 def _fit_holt_winters(drug_name: str):
-    """
-    Fit an additive Holt-Winters (ETS A,A,A) model on ALL historical data for
-    drug_name.  The fitted result is memoised in _hw_cache so subsequent calls
-    for the same drug are cheap.
-
-    Returns the fitted HoltWintersResults object, or raises on failure.
-    """
+ 
     global _hw_cache
     if drug_name in _hw_cache:
         return _hw_cache[drug_name]
@@ -126,11 +120,7 @@ def _fit_holt_winters(drug_name: str):
 
 
 def generate_hw_forecast(drug_name: str, forecast_date) -> dict:
-    """
-    Generate a Holt-Winters forecast for drug_name on forecast_date.
-    Returns a dict with the same shape as generate_forecast() so callers
-    can treat both interchangeably.
-    """
+   
     forecast_date = pd.Timestamp(forecast_date)
     df = load_historical_data()
     drug_df = (
@@ -341,12 +331,7 @@ def _get_model_feature_names() -> list:
 
 
 def compute_features_for_date(drug_name: str, forecast_date) -> tuple:
-    """
-    Build a one-row feature DataFrame for the given drug and forecast date.
-    Uses historical sales up to (but not including) forecast_date for lags/rolling.
-
-    Returns: (feature_df, error_message)  — one of these will be None.
-    """
+   
     forecast_date = pd.Timestamp(forecast_date)
     df = load_historical_data()
 
