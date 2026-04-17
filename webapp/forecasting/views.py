@@ -1,17 +1,192 @@
-
-
-import json
 import traceback
 
 import pandas as pd
 import plotly.graph_objects as go
 from django.shortcuts import render
-from django.http import JsonResponse
-from django.views.decorators.http import require_POST
+from rest_framework import status
+from rest_framework.decorators import api_view, parser_classes
+from rest_framework.parsers import MultiPartParser
+from rest_framework.response import Response
 
 from . import ml_engine
+from .models import Medicine
+from .serializers import (
+    ForecastRequestSerializer,
+    InventoryRequestSerializer,
+    MedicineSerializer,
+    SalesRecordSerializer,
+)
 
 
+def _error_in_result(result):
+    return isinstance(result, dict) and bool(result.get("error"))
+
+
+@api_view(["GET"])
+def api_root(request):
+    return Response(
+        {
+            "message": "Pharmacy Forecasting REST API",
+            "endpoints": {
+                "drugs": "/api/drugs/",
+                "inventory_list": "/api/inventory/",
+                "inventory_detail": "/api/inventory/<drug_code>/",
+                "forecast": "/api/forecast/<drug_name>/<forecast_date>/",
+                "forecast_chart": "/api/forecast/<drug_name>/<forecast_date>/chart/",
+                "inventory_recommendation": "/api/inventory/recommend/",
+                "batch_forecast": "/api/forecast/batch/",
+                "sales_log": "/api/sales/",
+            },
+            "notes": [
+                "Legacy UI routes were replaced with REST endpoints.",
+                "Use ISO date format YYYY-MM-DD for forecast_date.",
+            ],
+        }
+    )
+
+
+@api_view(["GET", "POST", "PUT", "PATCH", "DELETE"])
+def legacy_forecast_route(request):
+    return Response(
+        {
+            "error": "Route '/forecast/' was replaced by API endpoints.",
+            "use": [
+                "/api/forecast/<drug_name>/<forecast_date>/",
+                "/api/forecast/<drug_name>/<forecast_date>/chart/",
+                "/api/forecast/batch/",
+            ],
+        },
+        status=status.HTTP_410_GONE,
+    )
+
+
+@api_view(["GET", "POST", "PUT", "PATCH", "DELETE"])
+def legacy_inventory_route(request):
+    return Response(
+        {
+            "error": "Route '/inventory/' was replaced by API endpoints.",
+            "use": [
+                "/api/inventory/",
+                "/api/inventory/<drug_code>/",
+                "/api/inventory/recommend/",
+            ],
+        },
+        status=status.HTTP_410_GONE,
+    )
+
+
+@api_view(["GET"])
+def drug_list(request):
+    data = [
+        {
+            "drug_code": code,
+            "description": ml_engine.DRUG_DESCRIPTIONS.get(code, code),
+            "confidence_tier": ml_engine.CONFIDENCE_TIERS.get(code, "Medium"),
+        }
+        for code in ml_engine.DRUG_LIST
+    ]
+    return Response(data)
+
+
+@api_view(["GET"])
+def inventory_list(request):
+    medicines = Medicine.objects.all().order_by("drug_code")
+    serializer = MedicineSerializer(medicines, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["GET", "PUT"])
+def inventory_detail(request, drug_code):
+    try:
+        medicine = Medicine.objects.get(drug_code=drug_code)
+    except Medicine.DoesNotExist:
+        return Response({"error": "Medicine not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "GET":
+        serializer = MedicineSerializer(medicine)
+        return Response(serializer.data)
+
+    serializer = MedicineSerializer(medicine, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+def forecast_api(request, drug_name, forecast_date):
+    payload = {"drug_name": drug_name.upper(), "forecast_date": forecast_date}
+    validator = ForecastRequestSerializer(data=payload)
+    if not validator.is_valid():
+        return Response(validator.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    data = validator.validated_data
+    result = ml_engine.generate_forecast(data["drug_name"], data["forecast_date"])
+    if _error_in_result(result):
+        return Response(result, status=status.HTTP_400_BAD_REQUEST)
+    return Response(result)
+
+
+@api_view(["GET"])
+def forecast_chart_api(request, drug_name, forecast_date):
+    payload = {"drug_name": drug_name.upper(), "forecast_date": forecast_date}
+    validator = ForecastRequestSerializer(data=payload)
+    if not validator.is_valid():
+        return Response(validator.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    data = validator.validated_data
+    result = ml_engine.get_forecast_chart_data(data["drug_name"], data["forecast_date"])
+    if _error_in_result(result):
+        return Response(result, status=status.HTTP_400_BAD_REQUEST)
+    return Response(result)
+
+
+@api_view(["POST"])
+def inventory_recommendation(request):
+    serializer = InventoryRequestSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    data = serializer.validated_data
+    result = ml_engine.compute_inventory_recommendation(
+        drug_name=data["drug_name"],
+        current_stock=data["current_stock"],
+        lead_time_weeks=data["lead_time_weeks"],
+        service_level_pct=float(data["service_level_pct"]),
+        unit_cost=data["unit_cost"],
+        order_cost=data["order_cost"],
+        holding_cost_pct=data["holding_cost_pct"],
+    )
+
+    if _error_in_result(result):
+        return Response(result, status=status.HTTP_400_BAD_REQUEST)
+    return Response(result)
+
+
+@api_view(["POST"])
+@parser_classes([MultiPartParser])
+def batch_forecast(request):
+    csv_file = request.FILES.get("file") or request.FILES.get("csv_file")
+    if not csv_file:
+        return Response(
+            {"error": "CSV file is required using 'file' or 'csv_file' field."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    result = ml_engine.process_csv_forecast(csv_file)
+    has_error = any(isinstance(item, dict) and item.get("error") for item in result)
+    if has_error:
+        return Response(result, status=status.HTTP_400_BAD_REQUEST)
+    return Response(result)
+
+
+@api_view(["POST"])
+def sales_log(request):
+    serializer = SalesRecordSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 # ── Helper ────────────────────────────────────────────────────────────────────
 
 def _fig_json(fig) -> str:
