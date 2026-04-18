@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — Pharmacy Forecast System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background: #f5f7fa;
+            font-family: 'Inter', system-ui, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-card {
+            background: #fff;
+            border-radius: 14px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 24px rgba(15,23,42,.08);
+            padding: 2.5rem 2rem;
+            width: 100%;
+            max-width: 380px;
+        }
+        .brand-icon { color: #0284c7; font-size: 2rem; }
+        .brand-title { font-size: 1.1rem; font-weight: 700; color: #0f172a; }
+        .brand-sub { font-size: .78rem; color: #64748b; }
+        .form-control {
+            border-radius: 8px;
+            border-color: #e2e8f0;
+            font-size: .875rem;
+        }
+        .form-control:focus {
+            border-color: #0284c7;
+            box-shadow: 0 0 0 3px rgba(2,132,199,.12);
+        }
+        .btn-login {
+            background: #0284c7;
+            border-color: #0284c7;
+            border-radius: 8px;
+            font-weight: 500;
+            width: 100%;
+        }
+        .btn-login:hover { background: #0369a1; border-color: #0369a1; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="text-center mb-4">
+            <i class="bi bi-capsule-pill brand-icon"></i>
+            <div class="brand-title mt-2">Pharmacy Forecast System</div>
+            <div class="brand-sub">Sign in to continue</div>
+        </div>
+
+        {% if error %}
+        <div class="alert alert-danger d-flex align-items-center gap-2 py-2" style="font-size:.85rem;">
+            <i class="bi bi-exclamation-circle-fill"></i>
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="post" action="{% url 'forecasting:login' %}{% if request.GET.next %}?next={{ request.GET.next }}{% endif %}">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label class="form-label" style="font-size:.855rem; color:#374151;">Username</label>
+                <input type="text" name="username" class="form-control" autofocus autocomplete="username">
+            </div>
+            <div class="mb-4">
+                <label class="form-label" style="font-size:.855rem; color:#374151;">Password</label>
+                <input type="password" name="password" class="form-control" autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn btn-primary btn-login">
+                <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
+            </button>
+        </form>
+
+        <div class="text-center mt-4" style="font-size:.75rem; color:#94a3b8;">
+            No account? Please <code>contact your system admin to gain access</code>
+        </div>
+    </div>
+</body>
+</html>
