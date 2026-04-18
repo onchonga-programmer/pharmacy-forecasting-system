@@ -7,6 +7,9 @@ from rest_framework import status
 from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
+from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import redirect
 
 from . import ml_engine
 from .models import Medicine
@@ -193,9 +196,25 @@ def _fig_json(fig) -> str:
     """Serialise a Plotly figure to a JSON string safe for template embedding."""
     return fig.to_json()
 
+def login_view(request):
+    error = None
+    if request.method == "POST":
+        username = request.POST.get("username", "").strip()
+        password = request.POST.get("password", "")
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            auth_login(request, user)
+            return redirect(request.GET.get("next", "/"))
+        error = "Invalid username or password."
+    return render(request, "forecasting/login.html", {"error": error})
 
+
+def logout_view(request):
+    auth_logout(request)
+    return redirect("forecasting:login")
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 
+@login_required
 def dashboard(request):
     try:
         m25    = ml_engine.load_2025_metrics()
@@ -273,6 +292,7 @@ def dashboard(request):
 
 # ── Results ───────────────────────────────────────────────────────────────────
 
+@login_required
 def results(request):
     selected_drug = request.GET.get("drug", "M01AB")
     selected_year = "2025"
@@ -353,6 +373,7 @@ def results(request):
 
 # ── Live Forecast ─────────────────────────────────────────────────────────────
 
+@login_required
 def forecast(request):
     result             = None
     batch_results      = None
@@ -437,6 +458,7 @@ def forecast(request):
 
 # ── Drift Monitor ─────────────────────────────────────────────────────────────
 
+@login_required
 def drift(request):
     try:
         cmp_df  = ml_engine.build_2025_comparison()
@@ -505,6 +527,7 @@ def drift(request):
 
 # ── Sample CSV download ───────────────────────────────────────────────────────
 
+@login_required
 def sample_csv(request):
     from django.http import HttpResponse
     from .base import generate_sample_csv_bytes
@@ -516,6 +539,7 @@ def sample_csv(request):
 
 # ── Inventory Optimisation ────────────────────────────────────────────────────
 
+@login_required
 def inventory(request):
     result    = None
     form_data = {

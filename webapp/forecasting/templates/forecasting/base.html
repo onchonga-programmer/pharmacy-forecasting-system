@@ -306,11 +306,20 @@
                 {% block breadcrumb %}{% endblock %}
             </ol>
         </nav>
-        <div class="d-flex align-items-center gap-2">
-            <span class="badge bg-success rounded-pill">
-                <i class="bi bi-check-circle me-1"></i>System Active
-            </span>
-            <small class="text-muted">Based on your pharmacy’s 2014–2024 sales history</small>
+        <div class="d-flex align-items-center gap-3">
+    <span class="badge bg-success rounded-pill">
+        <i class="bi bi-check-circle me-1"></i>System Active
+    </span>
+    {% if user.is_authenticated %}
+    <span class="text-muted" style="font-size:.8rem;">
+        <i class="bi bi-person-circle me-1"></i>{{ user.username }}
+    </span>
+    <a href="{% url 'forecasting:logout' %}"
+       class="btn btn-sm btn-outline-secondary"
+       style="font-size:.78rem; border-radius:7px; padding:.25rem .7rem;">
+        <i class="bi bi-box-arrow-right me-1"></i>Logout
+    </a>
+    {% endif %}
         </div>
     </div>
 

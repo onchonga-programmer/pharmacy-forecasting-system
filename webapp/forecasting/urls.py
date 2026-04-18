@@ -21,7 +21,12 @@ urlpatterns = [
         views.forecast_chart_api,
         name="api_forecast_chart",
     ),
+    #add UI endpoints for inventory recommendation and batch forecasting
     path("api/inventory/recommend/", views.inventory_recommendation, name="inventory_recommendation"),
     path("api/forecast/batch/", views.batch_forecast, name="batch_forecast"),
     path("api/sales/", views.sales_log, name="sales_log"),
+    #login/logout
+    path("login/",  views.login_view,  name="login"),
+    path("logout/", views.logout_view, name="logout"),
 ]
+
