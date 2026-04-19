@@ -4,7 +4,6 @@ from datetime import date, timedelta
 import io
 import csv
 
-# ── Page metadata (used in templates & views) ─────────────────────────────────
 
 PAGES = {
     "dashboard": {
@@ -29,7 +28,6 @@ PAGES = {
     },
 }
 
-# ── Drug metadata ─────────────────────────────────────────────────────────────
 
 DRUG_LABELS = {
     "M01AB": "M01AB — Anti-inflammatory (Acetic acid)",
@@ -48,7 +46,6 @@ ATC_MAIN_GROUPS = {
     "R": "Respiratory",
 }
 
-# Drift risk levels per drug based on 2018→2019 analysis
 DRUG_DRIFT_RISK = {
     "M01AB": "medium",   # +587%
     "M01AE": "medium",   # +289%
@@ -66,7 +63,6 @@ DRIFT_RISK_BADGES = {
     "critical": ("bg-danger",    "Critical"),
 }
 
-# ── Date helpers ──────────────────────────────────────────────────────────────
 
 def get_next_monday(from_date: date = None) -> date:
     """Return the next Monday from a given date (defaults to today)."""
@@ -85,7 +81,6 @@ def date_to_week_label(d) -> str:
     return f"Week {week}, {ts.year}"
 
 
-# ── Formatting helpers ────────────────────────────────────────────────────────
 
 def fmt_pct(value: float, decimals: int = 1) -> str:
     """Format a float as a percentage string, e.g. 5.6 → '5.6%'"""
@@ -118,7 +113,6 @@ def fmt_change(value: float) -> dict:
         return {"text": "—", "css": "text-muted"}
 
 
-# ── Drift evaluation ──────────────────────────────────────────────────────────
 
 def evaluate_drift(mae_current: float, mae_baseline: float,
                    threshold_multiplier: float = 1.20) -> dict:
@@ -154,7 +148,6 @@ def evaluate_drift(mae_current: float, mae_baseline: float,
     }
 
 
-# ── CSV template generator ────────────────────────────────────────────────────
 
 SAMPLE_CSV_ROWS = [
     {"drug_name": "M01AB", "datum": "2020-03-02"},
@@ -181,9 +174,7 @@ def generate_sample_csv_bytes() -> bytes:
     return generate_sample_csv().encode("utf-8")
 
 
-# ── Model performance thresholds ──────────────────────────────────────────────
 
-# Based on 2018 validation results (mae=1.74, mape=5.6, r2=0.9922)
 PERFORMANCE_TIERS = {
     "excellent": {"max_mape": 5.0,  "min_r2": 0.95, "label": "Excellent",  "css": "text-success"},
     "good":      {"max_mape": 10.0, "min_r2": 0.85, "label": "Good",       "css": "text-primary"},
